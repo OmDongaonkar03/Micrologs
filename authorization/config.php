@@ -16,4 +16,6 @@ if ($conn->connect_error) {
 }
 
 $conn->set_charset("utf8mb4");
-$conn->query("SET time_zone = '+05:30'");
+$conn->query("SET time_zone = '" . APP_TIMEZONE . "'");
+
+date_default_timezone_set(TIMEZONE);

@@ -11,8 +11,6 @@ require_once __DIR__ . "/../authorization/config.php";
 require_once __DIR__ . "/../utils/vendor/autoload.php"; // For MaxMind GeoIP2
 require_once __DIR__ . "/../utils/rate-limit.php"; // For rate limiting functions
 
-date_default_timezone_set("Asia/Kolkata");
-
 // RESPONSE
 function sendResponse($success, $message, $data = null, $status = 200)
 {

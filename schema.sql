@@ -175,3 +175,83 @@ CREATE TABLE link_clicks (
     INDEX idx_project_id (project_id),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB;
+
+-- ============================================================
+-- ERROR GROUPS (one row per unique error, fingerprint based)
+-- ============================================================
+CREATE TABLE error_groups (
+    id               INT UNSIGNED   AUTO_INCREMENT PRIMARY KEY,
+    project_id       INT UNSIGNED   NOT NULL,
+    fingerprint      CHAR(64)       NOT NULL,  -- SHA-256 of project+type+message+file+line
+    error_type       VARCHAR(100)   NOT NULL DEFAULT '',  -- TypeError, ReferenceError etc
+    message          VARCHAR(1024)  NOT NULL DEFAULT '',
+    file             VARCHAR(512)   NOT NULL DEFAULT '',
+    line             INT UNSIGNED   NULL,
+    severity         ENUM('info','warning','error','critical') NOT NULL DEFAULT 'error',
+    environment      ENUM('production','staging','development','unknown') NOT NULL DEFAULT 'production',
+    status           ENUM('open','resolved','ignored') NOT NULL DEFAULT 'open',
+    occurrence_count INT UNSIGNED   NOT NULL DEFAULT 1,
+    first_seen       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_fingerprint (project_id, fingerprint),
+    INDEX idx_project_id (project_id),
+    INDEX idx_status (project_id, status),
+    INDEX idx_severity (project_id, severity),
+    INDEX idx_last_seen (project_id, last_seen),
+
+    CONSTRAINT fk_eg_project
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- ============================================================
+-- ERROR EVENTS (one row per occurrence)
+-- ============================================================
+CREATE TABLE error_events (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    group_id    INT UNSIGNED    NOT NULL,
+    project_id  INT UNSIGNED    NOT NULL,
+    location_id INT UNSIGNED    NULL,
+    device_id   INT UNSIGNED    NULL,
+    stack_trace TEXT            NULL,
+    url         VARCHAR(2048)   NOT NULL DEFAULT '',
+    environment ENUM('production','staging','development','unknown') NOT NULL DEFAULT 'production',
+    severity    ENUM('info','warning','error','critical') NOT NULL DEFAULT 'error',
+    context     JSON            NULL,  -- free JSON — user_id, order_id, anything
+    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_group_id (group_id),
+    INDEX idx_project_id (project_id),
+    INDEX idx_created_at (created_at),
+
+    CONSTRAINT fk_ee_group
+        FOREIGN KEY (group_id) REFERENCES error_groups(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_ee_project
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- ============================================================
+-- AUDIT LOGS
+-- ============================================================
+CREATE TABLE audit_logs (
+    id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id INT UNSIGNED    NOT NULL,
+    action     VARCHAR(100)    NOT NULL,  -- e.g. user.login, order.placed, admin.deleted
+    actor      VARCHAR(255)    NOT NULL DEFAULT '',  -- who did it (user email, id, system)
+    ip_hash    CHAR(64)        NOT NULL DEFAULT '',
+    context    JSON            NULL,  -- free JSON — any extra data
+    created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_project_id (project_id),
+    INDEX idx_action (project_id, action),
+    INDEX idx_created_at (created_at),
+
+    CONSTRAINT fk_al_project
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;

@@ -2,7 +2,4 @@ utils/vendor/
 utils/geoip/*.mmdb
 utils/rate_limits/
 utils/rate_blocks/
-frontend/node_modules
-frontend/dist
-frontend/.env
 authorization/env.php
