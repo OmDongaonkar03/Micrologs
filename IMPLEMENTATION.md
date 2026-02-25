@@ -2,7 +2,7 @@
 
 ## What is Micrologs?
 
-Micrologs is a lightweight, self-hosted analytics engine. It tracks pageviews, visitors, sessions, devices, locations, and tracked links — all from your own server, your own database.
+Micrologs is a lightweight, self-hosted analytics engine. It tracks pageviews, visitors, sessions, devices, locations, tracked links, errors, and audit events — all from your own server, your own database.
 
 ---
 
@@ -62,16 +62,18 @@ cp authorization/.env.example.php authorization/env.php
 Edit `authorization/env.php` and fill in your values:
 
 ```php
-define("DB_HOST", "localhost");
-define("DB_USER", "your_db_user");
-define("DB_PASS", "your_db_password");
-define("DB_NAME", "micrologs");
+define("DB_HOST",       "localhost");
+define("DB_USER",       "your_db_user");
+define("DB_PASS",       "your_db_password");
+define("DB_NAME",       "micrologs");
 
-define("APP_URL", "https://yourdomain.com");
+define("APP_URL",       "https://yourdomain.com");
+define("APP_TIMEZONE",  "+05:30");
+define("TIMEZONE",      "Asia/Kolkata");
 
-define("ADMIN_KEY", "generate_a_long_random_string");
-define("IP_HASH_SALT", "another_long_random_string");
-define("GEOIP_PATH", __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
+define("ADMIN_KEY",     "generate_a_long_random_string");
+define("IP_HASH_SALT",  "another_long_random_string");
+define("GEOIP_PATH",    __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
 ```
 
 > **Generate secure keys** — run this in PHP once:
@@ -167,18 +169,103 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
 Add this to every page you want to track, before `</body>`:
 
 ```html
-<script>
-  window.MICROLOGS_PUBLIC_KEY = "your_public_key";
-  window.MICROLOGS_API_URL    = "https://yourdomain.com";
+<script
+  src="https://yourdomain.com/snippet/micrologs.js"
+  data-public-key="your_public_key"
+  data-environment="production"
+  async>
 </script>
-<script src="https://yourdomain.com/snippet/micrologs.js"></script>
 ```
 
-That's it. Pageviews, sessions, devices, and locations are now being tracked automatically.
+That's it. Pageviews, sessions, devices, locations, and errors are now being tracked automatically.
+
+**Optional — if your API lives on a different domain:**
+
+```html
+<script
+  src="https://yourdomain.com/snippet/micrologs.js"
+  data-public-key="your_public_key"
+  data-api-url="https://api.yourdomain.com"
+  data-environment="production"
+  async>
+</script>
+```
+
+**Framework integration:**
+
+For React/Vue/Svelte — add once in your root `index.html`.
+
+For Next.js — add in `layout.tsx` using `next/script`:
+
+```jsx
+<Script
+  src="https://yourdomain.com/snippet/micrologs.js"
+  data-public-key="your_public_key"
+  data-environment="production"
+  strategy="afterInteractive"
+/>
+```
 
 ---
 
-## 9. API Reference
+## 9. Error Tracking
+
+Errors are auto-caught from the snippet — no extra setup needed. The snippet listens to `window.onerror` and `unhandledrejection` automatically.
+
+**Manual error — from JS:**
+
+```js
+Micrologs.error("Payment failed", { order_id: 123, amount: 2999 }, "critical");
+```
+
+**Manual error — from any backend (one HTTP call):**
+
+```bash
+curl -X POST https://yourdomain.com/api/track/error.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_public_key" \
+  -d '{
+    "message": "Undefined variable $user",
+    "error_type": "PHP Warning",
+    "file": "/app/checkout.php",
+    "line": 42,
+    "stack": "...",
+    "severity": "error",
+    "environment": "production",
+    "context": { "user_id": 456, "order_id": "ORD-789" }
+  }'
+```
+
+Works with any backend — PHP, Node, Python, Laravel, Django, anything that can make an HTTP request.
+
+---
+
+## 10. Audit Logging
+
+Track any action from any application.
+
+**From JS:**
+
+```js
+Micrologs.audit("user.login", "user@email.com", { role: "admin" });
+```
+
+**From any backend:**
+
+```bash
+curl -X POST https://yourdomain.com/api/track/audit.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_public_key" \
+  -d '{
+    "action": "order.placed",
+    "actor": "user@email.com",
+    "context": { "order_id": "ORD-789", "amount": 2999 }
+  }'
+```
+
+---
+
+## 11. API Reference
 
 All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 
@@ -192,6 +279,9 @@ All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 | `/api/analytics/locations.php` | GET | Breakdown by country, region, city |
 | `/api/analytics/referrers.php` | GET | Traffic sources |
 | `/api/analytics/utm.php` | GET | UTM campaign data |
+| `/api/analytics/errors.php` | GET | Error groups with occurrence counts |
+| `/api/analytics/error-detail.php` | GET | Single error group with all events |
+| `/api/analytics/audits.php` | GET | Audit log events |
 
 All analytics endpoints accept a `range` query param:
 
@@ -202,11 +292,16 @@ All analytics endpoints accept a `range` query param:
 ?range=custom&from=2025-01-01&to=2025-01-31
 ```
 
-**Example:**
+**Errors endpoint filters:**
 
-```bash
-curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
-  -H "X-API-Key: your_secret_key"
+```
+?range=30d&status=open&severity=critical&environment=production
+```
+
+**Audits endpoint filters:**
+
+```
+?range=30d&action=user.login&actor=user@email.com
 ```
 
 ---
@@ -266,8 +361,6 @@ curl "https://yourdomain.com/api/analytics/link-detail.php?code=aB3xYz12&range=3
 
 ### Verify a Key
 
-Check whether a public or secret key is valid:
-
 ```bash
 curl -X POST https://yourdomain.com/api/projects/verify.php \
   -H "Content-Type: application/json" \
@@ -276,7 +369,7 @@ curl -X POST https://yourdomain.com/api/projects/verify.php \
 
 ---
 
-## 10. Key Concepts
+## 12. Key Concepts
 
 **Public Key** — used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domain`.
 
@@ -286,7 +379,9 @@ curl -X POST https://yourdomain.com/api/projects/verify.php \
 
 **Session** — tracked via `sessionStorage`. A new session starts if 30 minutes pass with no activity.
 
-**Bot filtering** — requests from known bots, crawlers, and headless browsers are automatically ignored and not counted.
+**Error Grouping** — errors are fingerprinted by `type + message + file + line`. Same error fired 1000 times = 1 group, 1000 occurrences. If a resolved error fires again it automatically reopens.
+
+**Bot Filtering** — requests from known bots, crawlers, and headless browsers are automatically ignored.
 
 **Deduplication** — the same visitor hitting the same URL within 5 minutes is counted only once.
 
