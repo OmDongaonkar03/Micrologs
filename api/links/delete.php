@@ -14,6 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_links_delete", 30, 60);
+
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 

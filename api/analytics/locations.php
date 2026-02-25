@@ -14,6 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_locations", 60, 60);
+
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();

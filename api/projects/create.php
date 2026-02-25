@@ -13,6 +13,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_create", 5, 60);
+
 $input = json_decode(file_get_contents("php://input"), true);
 
 if (!$input) {

@@ -7,10 +7,10 @@
         Desc     : Log click and redirect to destination (302)
     ===============================================================
 */
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 include_once __DIR__ . "/../includes/functions.php";
+
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_devices", 120, 60);
 
 $code = trim($_GET["c"] ?? "");
 

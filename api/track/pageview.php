@@ -14,6 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_devices", 60, 60);
+
 // Block bots before doing anything
 if (isBot()) {
     http_response_code(204);
