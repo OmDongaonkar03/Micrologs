@@ -7,7 +7,7 @@ export function DashboardLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <div className="flex-1 flex flex-col min-h-screen min-w-0">
+      <div className="flex-1 flex flex-col min-h-screen min-w-0 w-full">
         <header className="h-12 flex items-center border-b border-border/50 px-4 gap-3">
           <SidebarTrigger />
           <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
@@ -15,7 +15,7 @@ export function DashboardLayout() {
             <span>micrologs</span>
           </div>
         </header>
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 w-full">
           <Outlet />
         </main>
       </div>

@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ApiKeys from "./pages/ApiKeys";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import Docs from "./pages/Docs";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/docs" element={<Docs />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<ApiKeys />} />
             <Route path="analytics" element={<PlaceholderPage title="Analytics" />} />

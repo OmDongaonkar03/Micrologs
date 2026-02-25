@@ -63,7 +63,7 @@ const ApiKeysPage = () => {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-light text-foreground">API Keys</h1>
