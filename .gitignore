@@ -1,3 +1,4 @@
+utils/vendor/
 utils/rate_limits/
 utils/rate_blocks/
 frontend/node_modules
