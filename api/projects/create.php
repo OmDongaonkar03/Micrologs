@@ -15,6 +15,11 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
 rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_create", 5, 60);
 
+$adminKey = $_SERVER["HTTP_X_ADMIN_KEY"] ?? "";
+if (empty($adminKey) || $adminKey !== ADMIN_KEY) {
+    sendResponse(false, "Unauthorized", null, 401);
+}
+
 $input = json_decode(file_get_contents("php://input"), true);
 
 if (!$input) {
