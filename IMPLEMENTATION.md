@@ -140,7 +140,7 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
   -H "X-Admin-Key: your_admin_key" \
   -d '{
     "name": "My Website",
-    "allowed_domain": "mywebsite.com"
+    "allowed_domains": ["mywebsite.com", "staging.mywebsite.com"]
   }'
 ```
 
@@ -153,7 +153,7 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
   "data": {
     "id": 1,
     "name": "My Website",
-    "allowed_domain": "mywebsite.com",
+    "allowed_domains": ["mywebsite.com", "staging.mywebsite.com"],
     "secret_key": "abc123...",
     "public_key": "xyz789..."
   }
@@ -161,6 +161,19 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
 ```
 
 > Store the `secret_key` immediately — it is never shown again.
+
+**Edit a project** — update name and/or allowed domains anytime:
+
+```bash
+curl -X POST https://yourdomain.com/api/projects/edit.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{
+    "id": 1,
+    "name": "My Website Updated",
+    "allowed_domains": ["mywebsite.com", "staging.mywebsite.com", "localhost"]
+  }'
+```
 
 ---
 
@@ -269,6 +282,15 @@ curl -X POST https://yourdomain.com/api/track/audit.php \
 
 All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 
+### Projects
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/projects/create.php` | POST | X-Admin-Key | Create a new project |
+| `/api/projects/edit.php` | POST | X-Admin-Key | Edit project name or allowed domains |
+| `/api/projects/verify.php` | POST | None | Verify a public or secret key |
+| `/api/health.php` | GET | None | System health check |
+
 ### Analytics
 
 | Endpoint | Method | Description |
@@ -369,11 +391,38 @@ curl -X POST https://yourdomain.com/api/projects/verify.php \
 
 ---
 
+### Health Check
+
+```bash
+curl https://yourdomain.com/api/health.php
+```
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-25 14:30:00",
+  "checks": {
+    "php":         { "status": "ok",   "version": "8.2.12", "message": "PHP 8.2.12" },
+    "database":    { "status": "ok",   "message": "Connected" },
+    "geoip":       { "status": "warn", "message": "GeoLite2-City.mmdb not found — location tracking disabled" },
+    "rate_limiter":{ "status": "ok",   "message": "rate_limits and rate_blocks directories are writable" }
+  }
+}
+```
+
+Returns `200` when healthy, `503` when any critical check fails. `warn` status does not affect overall health.
+
+---
+
 ## 12. Key Concepts
 
-**Public Key** — used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domain`.
+**Public Key** — used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domains` list.
 
 **Secret Key** — used server-side only for analytics and link management. Never expose in frontend code.
+
+**Allowed Domains** — one or more domains that are permitted to send data using the public key. Requests from unlisted domains are rejected. Supports subdomains automatically.
 
 **Visitor ID** — stored in a cookie (`_ml_vid`) for 365 days. If the cookie is cleared, the canvas fingerprint is used to re-identify the visitor.
 
@@ -391,5 +440,5 @@ curl -X POST https://yourdomain.com/api/projects/verify.php \
 
 - Never commit `authorization/env.php` — it is gitignored by default
 - Never expose your `secret_key` in frontend code
-- The `ADMIN_KEY` is only needed for project creation — keep it private
+- The `ADMIN_KEY` is only needed for project creation and editing — keep it private
 - IPs are never stored raw — they are hashed with your `IP_HASH_SALT` immediately on ingestion

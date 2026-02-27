@@ -27,28 +27,60 @@ if (!$input) {
 }
 
 $name = trim($input["name"] ?? "");
-$allowedDomain = trim($input["allowed_domain"] ?? "");
+$allowedDomains = $input["allowed_domains"] ?? [];
 
-if (empty($name) || empty($allowedDomain)) {
-    sendResponse(false, "name and allowed_domain are required", null, 400);
+if (empty($name)) {
+    sendResponse(false, "name is required", null, 400);
+}
+
+if (empty($allowedDomains) || !is_array($allowedDomains)) {
+    sendResponse(false, "allowed_domains must be a non-empty array", null, 400);
 }
 
 if (strlen($name) > 100) {
     sendResponse(false, "name must be 100 characters or less", null, 400);
 }
 
-// Strip protocol from domain if provided
-$allowedDomain = preg_replace("#^https?://#", "", $allowedDomain);
-$allowedDomain = rtrim($allowedDomain, "/");
+if (count($allowedDomains) > 20) {
+    sendResponse(false, "Maximum 20 allowed domains per project", null, 400);
+}
 
-// Generate keys
+// ── Sanitize domains ──────────────────────────────────────────────
+$cleaned = [];
+foreach ($allowedDomains as $domain) {
+    $domain = trim($domain);
+    $domain = preg_replace("#^https?://#", "", $domain);
+    $domain = rtrim($domain, "/");
+    $domain = strtolower($domain);
+
+    if (empty($domain)) {
+        continue;
+    }
+
+    if (strlen($domain) > 253) {
+        sendResponse(false, "Domain '{$domain}' is too long", null, 400);
+    }
+
+    $cleaned[] = $domain;
+}
+
+if (empty($cleaned)) {
+    sendResponse(false, "No valid domains provided", null, 400);
+}
+
+// Remove duplicates
+$cleaned = array_values(array_unique($cleaned));
+
+$domainsStr = implode(",", $cleaned);
+
+// ── Generate keys ─────────────────────────────────────────────────
 $secretKey = bin2hex(random_bytes(32)); // 64 char
 $publicKey = bin2hex(random_bytes(16)); // 32 char
 
 $stmt = $conn->prepare(
-    "INSERT INTO projects (name, secret_key, public_key, allowed_domain) VALUES (?, ?, ?, ?)"
+    "INSERT INTO projects (name, secret_key, public_key, allowed_domains) VALUES (?, ?, ?, ?)"
 );
-$stmt->bind_param("ssss", $name, $secretKey, $publicKey, $allowedDomain);
+$stmt->bind_param("ssss", $name, $secretKey, $publicKey, $domainsStr);
 
 if (!$stmt->execute()) {
     sendResponse(false, "Failed to create project", null, 500);
@@ -63,7 +95,7 @@ sendResponse(
     [
         "id" => $id,
         "name" => $name,
-        "allowed_domain" => $allowedDomain,
+        "allowed_domains" => $cleaned,
         "secret_key" => $secretKey,
         "public_key" => $publicKey,
     ]

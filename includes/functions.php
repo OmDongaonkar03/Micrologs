@@ -46,7 +46,7 @@ function verifyPublicKey($conn)
     }
 
     $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domain FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
+        "SELECT id, name, allowed_domains FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
     );
     $stmt->bind_param("s", $key);
     $stmt->execute();
@@ -65,12 +65,19 @@ function verifyPublicKey($conn)
             "",
             strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
         );
-        $allowed = preg_replace(
-            "/^www\./",
-            "",
-            strtolower($project["allowed_domain"])
-        );
-        if ($host !== $allowed && !str_ends_with($host, "." . $allowed)) {
+
+        $allowed  = false;
+        $domains  = explode(",", $project["allowed_domains"]);
+
+        foreach ($domains as $domain) {
+            $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
+            if ($host === $domain || str_ends_with($host, "." . $domain)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
             sendResponse(false, "Domain not allowed for this key", null, 403);
         }
     }

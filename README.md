@@ -6,10 +6,10 @@ Self-hostable, plug-and-play analytics engine. Drop a JS snippet on any website 
 
 ## Stack
 
-- **Backend** — PHP 8.1+
-- **Database** — MySQL 8.0+
-- **Geolocation** — MaxMind GeoLite2 (local, no API calls)
-- **Snippet** — Vanilla JS, no dependencies
+- **Backend** - PHP 8.1+
+- **Database** - MySQL 8.0+
+- **Geolocation** - MaxMind GeoLite2 (local, no API calls)
+- **Snippet** - Vanilla JS, no dependencies
 
 ---
 
@@ -21,8 +21,8 @@ Self-hostable, plug-and-play analytics engine. Drop a JS snippet on any website 
 - Referrer source categorization
 - UTM campaign tracking
 - Shareable link tracking with click analytics
-- Error monitoring — auto-caught + manual, grouped by fingerprint
-- Audit logging — track any action from any stack
+- Error monitoring - auto-caught + manual, grouped by fingerprint
+- Audit logging - track any action from any stack
 - Bot filtering
 - File-based rate limiting
 - API key auth (public + secret key per project)
