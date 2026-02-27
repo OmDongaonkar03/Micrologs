@@ -28,12 +28,18 @@ if (empty($key)) {
 }
 
 $stmt = $conn->prepare("
-    SELECT id, name, allowed_domain,
+    SELECT id, name, allowed_domains,
            CASE WHEN secret_key = ? THEN 'secret' ELSE 'public' END AS key_type
     FROM projects
     WHERE (secret_key = ? OR public_key = ?) AND is_active = 1
     LIMIT 1
 ");
+if (!$stmt) {
+    writeLog("ERROR", "verify key SELECT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("sss", $key, $key, $key);
 $stmt->execute();
 $project = $stmt->get_result()->fetch_assoc();
@@ -47,5 +53,6 @@ sendResponse(true, "Key verified", [
     "valid" => true,
     "key_type" => $project["key_type"],
     "project_name" => $project["name"],
-    "allowed_domain" => $project["allowed_domain"],
+    "allowed_domains" => $project["allowed_domains"],
 ]);
+?>

@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_devices", 60, 60);
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_pageview", 60, 60);
 
 // Block bots before doing anything
 if (isBot()) {
@@ -71,6 +71,12 @@ $utm = extractUtm($url);
 $stmt = $conn->prepare(
     "SELECT id FROM visitors WHERE project_id = ? AND visitor_hash = ? LIMIT 1"
 );
+if (!$stmt) {
+    writeLog("ERROR", "visitor SELECT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("is", $projectId, $visitorHash);
 $stmt->execute();
 $visitor = $stmt->get_result()->fetch_assoc();
@@ -80,6 +86,12 @@ if (!$visitor && !empty($fingerprintHash)) {
     $stmt = $conn->prepare(
         "SELECT id FROM visitors WHERE project_id = ? AND fingerprint_hash = ? LIMIT 1"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "visitor fingerprint SELECT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("is", $projectId, $fingerprintHash);
     $stmt->execute();
     $visitor = $stmt->get_result()->fetch_assoc();
@@ -100,8 +112,19 @@ if (!$visitor) {
     $stmt = $conn->prepare(
         "INSERT INTO visitors (project_id, visitor_hash, fingerprint_hash) VALUES (?, ?, ?)"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "visitor INSERT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("iss", $projectId, $visitorHash, $fingerprintHash);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "visitor INSERT execute failed", [
+            "error" => $stmt->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $visitorDbId = (int) $conn->insert_id;
     $stmt->close();
 } else {
@@ -120,6 +143,12 @@ $sessionTimeout = 1800; // 30 minutes
 $stmt = $conn->prepare(
     "SELECT id, last_activity FROM sessions WHERE session_token = ? LIMIT 1"
 );
+if (!$stmt) {
+    writeLog("ERROR", "session SELECT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("s", $sessionToken);
 $stmt->execute();
 $session = $stmt->get_result()->fetch_assoc();
@@ -129,8 +158,19 @@ if (!$session) {
     $stmt = $conn->prepare(
         "INSERT INTO sessions (project_id, visitor_id, session_token) VALUES (?, ?, ?)"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "session INSERT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("iis", $projectId, $visitorDbId, $sessionToken);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "session INSERT execute failed", [
+            "error" => $stmt->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $sessionId = (int) $conn->insert_id;
     $stmt->close();
 } else {
@@ -142,8 +182,19 @@ if (!$session) {
         $stmt = $conn->prepare(
             "INSERT INTO sessions (project_id, visitor_id, session_token) VALUES (?, ?, ?)"
         );
+        if (!$stmt) {
+            writeLog("ERROR", "session renewal INSERT prepare failed", [
+                "error" => $conn->error,
+            ]);
+            sendResponse(false, "Server error", null, 500);
+        }
         $stmt->bind_param("iis", $projectId, $visitorDbId, $newToken);
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            writeLog("ERROR", "session renewal INSERT execute failed", [
+                "error" => $stmt->error,
+            ]);
+            sendResponse(false, "Server error", null, 500);
+        }
         $sessionId = (int) $conn->insert_id;
         $stmt->close();
     } else {
@@ -202,6 +253,13 @@ $stmt = $conn->prepare("
          screen_resolution, timezone)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
+if (!$stmt) {
+    writeLog("ERROR", "pageview INSERT prepare failed", [
+        "error" => $conn->error,
+        "project_id" => $projectId,
+    ]);
+    sendResponse(false, "Failed to record pageview", null, 500);
+}
 $stmt->bind_param(
     "iiiiisssssssssss",
     $projectId,
@@ -223,8 +281,13 @@ $stmt->bind_param(
 );
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "pageview INSERT execute failed", [
+        "error" => $stmt->error,
+        "project_id" => $projectId,
+    ]);
     sendResponse(false, "Failed to record pageview", null, 500);
 }
 $stmt->close();
 
 sendResponse(true, "OK", ["counted" => true]);
+?>

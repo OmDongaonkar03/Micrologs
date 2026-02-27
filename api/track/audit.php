@@ -26,8 +26,8 @@ if (!$input) {
 }
 
 // Inputs
-$action = substr(trim($input["action"] ?? ""), 0, 100); // e.g. user.login, order.placed
-$actor = substr(trim($input["actor"] ?? ""), 0, 255); // e.g. user@email.com, user_id:123, system
+$action = substr(trim($input["action"] ?? ""), 0, 100);
+$actor = substr(trim($input["actor"] ?? ""), 0, 255);
 $context =
     isset($input["context"]) && is_array($input["context"])
         ? json_encode($input["context"])
@@ -46,9 +46,20 @@ $stmt = $conn->prepare("
     INSERT INTO audit_logs (project_id, action, actor, ip_hash, context)
     VALUES (?, ?, ?, ?, ?)
 ");
+if (!$stmt) {
+    writeLog("ERROR", "audit_logs INSERT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Failed to record audit log", null, 500);
+}
 $stmt->bind_param("issss", $projectId, $action, $actor, $ipHash, $context);
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "audit_logs INSERT execute failed", [
+        "error" => $stmt->error,
+        "project_id" => $projectId,
+        "action" => $action,
+    ]);
     sendResponse(false, "Failed to record audit log", null, 500);
 }
 
@@ -56,3 +67,4 @@ $id = (int) $conn->insert_id;
 $stmt->close();
 
 sendResponse(true, "OK", ["id" => $id]);
+?>

@@ -15,8 +15,13 @@
 
     define("Geo_IP2_LICENSE_KEY", "your_maxmind_license_key");
     define("GEOIP_PATH", __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
+	
+	define("LOG_PATH", __DIR__ . "/../logs/micrologs.log");
 
     define("ADMIN_KEY", "your_secure_admin_key");
+
+    # CORS — comma-separated list of allowed origins (include scheme, e.g. https://example.com)
+    define("ALLOWED_ORIGINS", "https://example.com,http://localhost:8080");
 
     define("APP_URL", "https://your_domain_url");
 ?>

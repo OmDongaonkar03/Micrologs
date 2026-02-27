@@ -36,6 +36,12 @@ if (!$projectId) {
 $stmt = $conn->prepare(
     "SELECT id, name, allowed_domains FROM projects WHERE id = ? LIMIT 1"
 );
+if (!$stmt) {
+    writeLog("ERROR", "project SELECT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("i", $projectId);
 $stmt->execute();
 $project = $stmt->get_result()->fetch_assoc();
@@ -137,9 +143,20 @@ $types .= "i";
 
 $sql = "UPDATE projects SET " . implode(", ", $updates) . " WHERE id = ?";
 $stmt = $conn->prepare($sql);
+if (!$stmt) {
+    writeLog("ERROR", "project UPDATE prepare failed", [
+        "error" => $conn->error,
+        "project_id" => $projectId,
+    ]);
+    sendResponse(false, "Failed to update project", null, 500);
+}
 $stmt->bind_param($types, ...$params);
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "project UPDATE execute failed", [
+        "error" => $stmt->error,
+        "project_id" => $projectId,
+    ]);
     sendResponse(false, "Failed to update project", null, 500);
 }
 $stmt->close();
@@ -160,3 +177,4 @@ sendResponse(true, "Project updated successfully", [
     "is_active" => (bool) $updated["is_active"],
     "updated_at" => $updated["updated_at"],
 ]);
+?>

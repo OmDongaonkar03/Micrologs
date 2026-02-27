@@ -10,7 +10,7 @@
 
 include_once __DIR__ . "/../includes/functions.php";
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_devices", 120, 60);
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_redirect", 120, 60);
 
 $code = trim($_GET["c"] ?? "");
 
@@ -31,6 +31,14 @@ $stmt->close();
 if (!$link || !$link["is_active"]) {
     http_response_code(404);
     echo "Link not found";
+    exit();
+}
+
+// ── Validate destination scheme ───────────────────────────────
+$scheme = strtolower(parse_url($link["destination_url"], PHP_URL_SCHEME) ?? "");
+if (!in_array($scheme, ["http", "https"])) {
+    http_response_code(400);
+    echo "Invalid destination URL";
     exit();
 }
 
@@ -66,3 +74,4 @@ $stmt->close();
 // ── 302 redirect — always hits our server so every click is counted
 header("Location: " . $link["destination_url"], true, 302);
 exit();
+?>

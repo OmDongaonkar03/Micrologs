@@ -30,6 +30,13 @@ $stmt = $conn->prepare("
     GROUP BY tl.id
     ORDER BY tl.created_at DESC
 ");
+if (!$stmt) {
+    writeLog("ERROR", "links list SELECT prepare failed", [
+        "error" => $conn->error,
+        "project_id" => $projectId,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("i", $projectId);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -53,3 +60,4 @@ sendResponse(true, "Links fetched successfully", [
     "count" => count($links),
     "links" => $links,
 ]);
+?>

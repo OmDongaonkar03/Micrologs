@@ -68,21 +68,30 @@ if (empty($cleaned)) {
     sendResponse(false, "No valid domains provided", null, 400);
 }
 
-// Remove duplicates
 $cleaned = array_values(array_unique($cleaned));
-
 $domainsStr = implode(",", $cleaned);
 
 // ── Generate keys ─────────────────────────────────────────────────
-$secretKey = bin2hex(random_bytes(32)); // 64 char
-$publicKey = bin2hex(random_bytes(16)); // 32 char
+$secretKey = bin2hex(random_bytes(32));
+$publicKey = bin2hex(random_bytes(16));
 
 $stmt = $conn->prepare(
     "INSERT INTO projects (name, secret_key, public_key, allowed_domains) VALUES (?, ?, ?, ?)"
 );
+if (!$stmt) {
+    writeLog("ERROR", "project INSERT prepare failed", [
+        "error" => $conn->error,
+        "name" => $name,
+    ]);
+    sendResponse(false, "Failed to create project", null, 500);
+}
 $stmt->bind_param("ssss", $name, $secretKey, $publicKey, $domainsStr);
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "project INSERT execute failed", [
+        "error" => $stmt->error,
+        "name" => $name,
+    ]);
     sendResponse(false, "Failed to create project", null, 500);
 }
 
@@ -100,3 +109,4 @@ sendResponse(
         "public_key" => $publicKey,
     ]
 );
+?>

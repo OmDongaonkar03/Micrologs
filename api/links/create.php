@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_links_delete", 30, 60);
+rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_links_create", 30, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
@@ -55,9 +55,20 @@ do {
 $stmt = $conn->prepare(
     "INSERT INTO tracked_links (project_id, code, destination_url, label) VALUES (?, ?, ?, ?)"
 );
+if (!$stmt) {
+    writeLog("ERROR", "tracked_links INSERT prepare failed", [
+        "error" => $conn->error,
+        "project_id" => $projectId,
+    ]);
+    sendResponse(false, "Failed to create link", null, 500);
+}
 $stmt->bind_param("isss", $projectId, $code, $destinationUrl, $label);
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "tracked_links INSERT execute failed", [
+        "error" => $stmt->error,
+        "project_id" => $projectId,
+    ]);
     sendResponse(false, "Failed to create link", null, 500);
 }
 $stmt->close();
@@ -70,3 +81,4 @@ sendResponse(true, "Link created successfully", [
     "destination_url" => $destinationUrl,
     "label" => $label,
 ]);
+?>

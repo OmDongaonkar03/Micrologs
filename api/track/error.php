@@ -78,6 +78,12 @@ $now = date("Y-m-d H:i:s");
 $stmt = $conn->prepare(
     "SELECT id FROM error_groups WHERE project_id = ? AND fingerprint = ? LIMIT 1"
 );
+if (!$stmt) {
+    writeLog("ERROR", "error_groups SELECT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
 $stmt->bind_param("is", $projectId, $fingerprint);
 $stmt->execute();
 $group = $stmt->get_result()->fetch_assoc();
@@ -94,8 +100,18 @@ if ($group) {
             status = IF(status = 'resolved', 'open', status)
         WHERE id = ?
     ");
+    if (!$stmt) {
+        writeLog("ERROR", "error_groups UPDATE prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("ssi", $now, $severity, $groupId);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "error_groups UPDATE execute failed", [
+            "error" => $stmt->error,
+        ]);
+    }
     $stmt->close();
 } else {
     // New error group
@@ -104,6 +120,12 @@ if ($group) {
             (project_id, fingerprint, error_type, message, file, line, severity, environment, first_seen, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
+    if (!$stmt) {
+        writeLog("ERROR", "error_groups INSERT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param(
         "issssissss",
         $projectId,
@@ -117,7 +139,12 @@ if ($group) {
         $now,
         $now
     );
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "error_groups INSERT execute failed", [
+            "error" => $stmt->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $groupId = (int) $conn->insert_id;
     $stmt->close();
 }
@@ -128,6 +155,12 @@ $stmt = $conn->prepare("
         (group_id, project_id, location_id, device_id, stack_trace, url, environment, severity, context)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
+if (!$stmt) {
+    writeLog("ERROR", "error_events INSERT prepare failed", [
+        "error" => $conn->error,
+    ]);
+    sendResponse(false, "Failed to record error", null, 500);
+}
 $stmt->bind_param(
     "iiisssss",
     $groupId,
@@ -142,8 +175,13 @@ $stmt->bind_param(
 );
 
 if (!$stmt->execute()) {
+    writeLog("ERROR", "error_events INSERT execute failed", [
+        "error" => $stmt->error,
+        "project_id" => $projectId,
+    ]);
     sendResponse(false, "Failed to record error", null, 500);
 }
 $stmt->close();
 
 sendResponse(true, "OK", ["group_id" => $groupId]);
+?>

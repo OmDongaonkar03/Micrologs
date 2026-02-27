@@ -6,17 +6,67 @@
         Desc : Global helper functions
     ===============================================================
 */
-
 require_once __DIR__ . "/../authorization/config.php";
 require_once __DIR__ . "/../utils/vendor/autoload.php"; // For MaxMind GeoIP2
 require_once __DIR__ . "/../utils/rate-limit.php"; // For rate limiting functions
+
+$origin = $_SERVER["HTTP_ORIGIN"] ?? "";
+
+$allowedOrigins =
+    defined("ALLOWED_ORIGINS") && ALLOWED_ORIGINS !== ""
+        ? array_map("trim", explode(",", ALLOWED_ORIGINS))
+        : [];
+
+if (in_array($origin, $allowedOrigins)) {
+    header("Access-Control-Allow-Origin: $origin");
+}
+
+header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, X-API-Key");
+header("Access-Control-Max-Age: 86400");
+
+// Handle preflight request
+if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
+    http_response_code(200);
+    exit();
+}
+
+// LOGGING
+
+function writeLog($level, $message, $context = [])
+{
+    $logPath = defined("LOG_PATH")
+        ? LOG_PATH
+        : __DIR__ . "/../logs/micrologs.log";
+
+    $logDir = dirname($logPath);
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0755, true);
+    }
+
+    $timestamp = date("Y-m-d H:i:s");
+    $file = basename(
+        debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1)[0]["file"] ?? "unknown"
+    );
+    $contextStr = !empty($context)
+        ? " | " .
+            json_encode(
+                $context,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            )
+        : "";
+
+    $line =
+        "[{$timestamp}] [{$level}] [{$file}] {$message}{$contextStr}" . PHP_EOL;
+
+    file_put_contents($logPath, $line, FILE_APPEND | LOCK_EX);
+}
 
 // RESPONSE
 function sendResponse($success, $message, $data = null, $status = 200)
 {
     http_response_code($status);
     header("Content-Type: application/json");
-    header("Access-Control-Allow-Origin: *");
     header("Access-Control-Allow-Headers: X-API-Key, Content-Type");
 
     $response = [
@@ -48,6 +98,12 @@ function verifyPublicKey($conn)
     $stmt = $conn->prepare(
         "SELECT id, name, allowed_domains FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "verifyPublicKey prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("s", $key);
     $stmt->execute();
     $project = $stmt->get_result()->fetch_assoc();
@@ -66,8 +122,8 @@ function verifyPublicKey($conn)
             strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
         );
 
-        $allowed  = false;
-        $domains  = explode(",", $project["allowed_domains"]);
+        $allowed = false;
+        $domains = explode(",", $project["allowed_domains"]);
 
         foreach ($domains as $domain) {
             $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
@@ -94,8 +150,14 @@ function verifySecretKey($conn)
     }
 
     $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domain FROM projects WHERE secret_key = ? AND is_active = 1 LIMIT 1"
+        "SELECT id, name, allowed_domains FROM projects WHERE secret_key = ? AND is_active = 1 LIMIT 1"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "verifySecretKey prepare failed", [
+            "error" => $conn->error,
+        ]);
+        sendResponse(false, "Server error", null, 500);
+    }
     $stmt->bind_param("s", $key);
     $stmt->execute();
     $project = $stmt->get_result()->fetch_assoc();
@@ -220,6 +282,10 @@ function geolocate($ip)
             "is_vpn" => 0,
         ];
     } catch (Exception $e) {
+        writeLog("ERROR", "GeoIP lookup failed", [
+            "ip" => $ip,
+            "error" => $e->getMessage(),
+        ]);
         return $default;
     }
 }
@@ -395,8 +461,22 @@ function parseDateRange()
     $range = $_GET["range"] ?? "30d";
 
     if ($range === "custom") {
-        $from = $_GET["from"] ?? date("Y-m-d", strtotime("-30 days"));
-        $to = $_GET["to"] ?? date("Y-m-d");
+        $from = $_GET["from"] ?? "";
+        $to = $_GET["to"] ?? "";
+
+        if (
+            empty($from) ||
+            empty($to) ||
+            !DateTime::createFromFormat("Y-m-d", $from) ||
+            !DateTime::createFromFormat("Y-m-d", $to)
+        ) {
+            sendResponse(
+                false,
+                "Invalid date format. Use YYYY-MM-DD",
+                null,
+                400
+            );
+        }
     } else {
         $days = (int) filter_var($range, FILTER_SANITIZE_NUMBER_INT);
         $days = max(1, min($days, 365));
@@ -421,6 +501,12 @@ function resolveLocation($conn, $projectId, $geo)
     $stmt = $conn->prepare(
         "SELECT id FROM locations WHERE project_id = ? AND country_code = ? AND region = ? AND city = ? LIMIT 1"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "resolveLocation SELECT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        return null;
+    }
     $stmt->bind_param(
         "isss",
         $projectId,
@@ -439,6 +525,12 @@ function resolveLocation($conn, $projectId, $geo)
     $stmt = $conn->prepare(
         "INSERT INTO locations (project_id, country, country_code, region, city, is_vpn) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "resolveLocation INSERT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        return null;
+    }
     $stmt->bind_param(
         "issssi",
         $projectId,
@@ -448,7 +540,13 @@ function resolveLocation($conn, $projectId, $geo)
         $geo["city"],
         $geo["is_vpn"]
     );
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "resolveLocation INSERT execute failed", [
+            "error" => $stmt->error,
+        ]);
+        $stmt->close();
+        return null;
+    }
     $id = (int) $conn->insert_id;
     $stmt->close();
 
@@ -460,6 +558,12 @@ function resolveDevice($conn, $projectId, $device)
     $stmt = $conn->prepare(
         "SELECT id FROM devices WHERE project_id = ? AND device_type = ? AND os = ? AND browser = ? AND browser_version = ? LIMIT 1"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "resolveDevice SELECT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        return null;
+    }
     $stmt->bind_param(
         "issss",
         $projectId,
@@ -479,6 +583,12 @@ function resolveDevice($conn, $projectId, $device)
     $stmt = $conn->prepare(
         "INSERT INTO devices (project_id, device_type, os, browser, browser_version) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)"
     );
+    if (!$stmt) {
+        writeLog("ERROR", "resolveDevice INSERT prepare failed", [
+            "error" => $conn->error,
+        ]);
+        return null;
+    }
     $stmt->bind_param(
         "issss",
         $projectId,
@@ -487,9 +597,16 @@ function resolveDevice($conn, $projectId, $device)
         $device["browser"],
         $device["browser_version"]
     );
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        writeLog("ERROR", "resolveDevice INSERT execute failed", [
+            "error" => $stmt->error,
+        ]);
+        $stmt->close();
+        return null;
+    }
     $id = (int) $conn->insert_id;
     $stmt->close();
 
     return $id;
 }
+?>
