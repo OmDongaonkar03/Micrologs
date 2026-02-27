@@ -2,7 +2,7 @@
 
 ## What is Micrologs?
 
-Micrologs is a lightweight, self-hosted analytics engine. It tracks pageviews, visitors, sessions, devices, locations, tracked links, errors, and audit events — all from your own server, your own database.
+Micrologs is a lightweight, self-hosted analytics engine. It tracks pageviews, visitors, sessions, devices, locations, tracked links, errors, and audit events - all from your own server, your own database.
 
 ---
 
@@ -71,9 +71,13 @@ define("APP_URL",       "https://yourdomain.com");
 define("APP_TIMEZONE",  "+05:30");
 define("TIMEZONE",      "Asia/Kolkata");
 
-define("ADMIN_KEY",     "generate_a_long_random_string");
-define("IP_HASH_SALT",  "another_long_random_string");
-define("GEOIP_PATH",    __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
+define("ADMIN_KEY",       "generate_a_long_random_string");
+define("IP_HASH_SALT",    "another_long_random_string");
+define("GEOIP_PATH",      __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
+define("LOG_PATH",        __DIR__ . "/../logs/micrologs.log");
+
+# Comma-separated origins allowed for CORS (include scheme, no trailing slash)
+define("ALLOWED_ORIGINS", "https://yourdomain.com,http://localhost:8080");
 ```
 
 > **Generate secure keys** — run this in PHP once:
@@ -81,6 +85,8 @@ define("GEOIP_PATH",    __DIR__ . "/../utils/geoip/GeoLite2-City.mmdb");
 > echo bin2hex(random_bytes(32));
 > ```
 > Use a separate output for `ADMIN_KEY` and `IP_HASH_SALT`.
+
+> **Note on `Geo_IP2_LICENSE_KEY`** — this constant is not used at runtime. It is only needed when downloading the GeoLite2 database file (see Step 5). You do not need to define it in `env.php`.
 
 ---
 
@@ -313,6 +319,8 @@ All analytics endpoints accept a `range` query param:
 ?range=90d      # last 90 days
 ?range=custom&from=2025-01-01&to=2025-01-31
 ```
+
+> For `range=custom`, both `from` and `to` are required and must be valid `YYYY-MM-DD` dates. Invalid or missing values return `400`.
 
 **Errors endpoint filters:**
 
