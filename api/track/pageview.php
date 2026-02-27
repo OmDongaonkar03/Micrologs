@@ -35,9 +35,9 @@ if (!$input) {
 $url = substr(trim($input["url"] ?? ""), 0, 2048);
 $pageTitle = substr(trim($input["page_title"] ?? ""), 0, 512);
 $referrerUrl = substr(trim($input["referrer"] ?? ""), 0, 2048);
-$visitorId = trim($input["visitor_id"] ?? "");
-$fingerprint = trim($input["fingerprint"] ?? "");
-$sessionToken = trim($input["session_token"] ?? "");
+$visitorId = substr(trim($input["visitor_id"] ?? ""), 0, 256);
+$fingerprint = substr(trim($input["fingerprint"] ?? ""), 0, 256);
+$sessionToken = substr(trim($input["session_token"] ?? ""), 0, 256);
 $screenResolution = substr(trim($input["screen_resolution"] ?? ""), 0, 20);
 $timezone = substr(trim($input["timezone"] ?? ""), 0, 100);
 
@@ -138,8 +138,6 @@ if (!$visitor) {
 }
 
 // Resolve session
-$sessionTimeout = 1800; // 30 minutes
-
 $stmt = $conn->prepare(
     "SELECT id, last_activity FROM sessions WHERE session_token = ? LIMIT 1"
 );
@@ -174,38 +172,13 @@ if (!$session) {
     $sessionId = (int) $conn->insert_id;
     $stmt->close();
 } else {
-    $lastActivity = strtotime($session["last_activity"]);
-
-    if (time() - $lastActivity > $sessionTimeout) {
-        // Session expired — open a new one
-        $newToken = bin2hex(random_bytes(32));
-        $stmt = $conn->prepare(
-            "INSERT INTO sessions (project_id, visitor_id, session_token) VALUES (?, ?, ?)"
-        );
-        if (!$stmt) {
-            writeLog("ERROR", "session renewal INSERT prepare failed", [
-                "error" => $conn->error,
-            ]);
-            sendResponse(false, "Server error", null, 500);
-        }
-        $stmt->bind_param("iis", $projectId, $visitorDbId, $newToken);
-        if (!$stmt->execute()) {
-            writeLog("ERROR", "session renewal INSERT execute failed", [
-                "error" => $stmt->error,
-            ]);
-            sendResponse(false, "Server error", null, 500);
-        }
-        $sessionId = (int) $conn->insert_id;
-        $stmt->close();
-    } else {
-        $sessionId = (int) $session["id"];
-        $stmt = $conn->prepare(
-            "UPDATE sessions SET last_activity = NOW() WHERE id = ?"
-        );
-        $stmt->bind_param("i", $sessionId);
-        $stmt->execute();
-        $stmt->close();
-    }
+    $sessionId = (int) $session["id"];
+    $stmt = $conn->prepare(
+        "UPDATE sessions SET last_activity = NOW() WHERE id = ?"
+    );
+    $stmt->bind_param("i", $sessionId);
+    $stmt->execute();
+    $stmt->close();
 }
 
 // Deduplication - same visitor + same URL within 5 minutes
