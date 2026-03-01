@@ -16,6 +16,7 @@ Most analytics tools make you choose between simplicity and scale, or between fr
 - **Runs anywhere** - PHP + MySQL, works on $2/month shared hosting
 - **Your data** - nothing leaves your server, no third-party calls at runtime
 - **Analytics + error tracking in one** - no need for Plausible AND Sentry separately
+- **Headless by design** - the API is the product. Query your data as JSON, visualize it however fits your stack
 
 ---
 
@@ -23,6 +24,8 @@ Most analytics tools make you choose between simplicity and scale, or between fr
 
 **Analytics**
 - Unique visitors, sessions, pageviews, bounce rate
+- New vs returning visitors
+- Avg session duration, avg pages per session
 - Country, region, city breakdown
 - Device type, OS, browser
 - Referrer source categorization (organic, social, email, referral)
@@ -33,6 +36,7 @@ Most analytics tools make you choose between simplicity and scale, or between fr
 - Auto-caught JS errors (`window.onerror` + `unhandledrejection`)
 - Manual errors from any backend - PHP, Node, Python, anything with HTTP
 - Errors grouped by fingerprint - same error fires 1000x = 1 group, 1000 occurrences
+- Error trends over time - spot spikes after deploys
 - Severity levels: `info`, `warning`, `error`, `critical`
 
 **Other**
@@ -48,12 +52,8 @@ Most analytics tools make you choose between simplicity and scale, or between fr
 **1. Add the snippet**
 
 ```html
-<script
-  src="https://yourdomain.com/snippet/micrologs.js"
-  data-public-key="your_public_key"
-  data-environment="production"
-  async>
-</script>
+
+
 ```
 
 Pageviews, sessions, devices, locations, and JS errors are now tracked automatically.
@@ -96,15 +96,20 @@ curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
 | Stage | Status | What's included |
 |---|---|---|
 | v1.0 - REST API | Shipped | Full analytics, error tracking, audit logs, link tracking |
-| v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction (~10k pageviews/day on shared hosting) |
-| v2 - Performance | Planned | Redis caching, async queue, webhook alerts |
-| v3 - Realtime | Planned | WebSockets, live dashboard feed |
+| v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
+| v1.2 - Analytics Depth | Shipped | Session analytics, new vs returning visitors, error trends over time |
+| v2 - Infrastructure | Planned | Valkey/Redis caching, async queue via Symfony Messenger, webhook alerts |
+| v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 
 ---
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) - issues and PRs are welcome.
+
+Looking for contributors especially for:
+- SDKs for Node, Python, Laravel
+- APCu rate limiter for hosts that support it
 
 ---
 

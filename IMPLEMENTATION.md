@@ -309,12 +309,15 @@ All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/analytics/visitors.php` | GET | Unique visitors, pageviews, sessions, bounce rate |
+| `/api/analytics/visitors-returning.php` | GET | New vs returning visitors, percentage split |
+| `/api/analytics/sessions.php` | GET | Avg session duration, avg pages per session |
 | `/api/analytics/pages.php` | GET | Top pages by views |
 | `/api/analytics/devices.php` | GET | Breakdown by device, OS, browser |
 | `/api/analytics/locations.php` | GET | Breakdown by country, region, city |
 | `/api/analytics/referrers.php` | GET | Traffic sources |
 | `/api/analytics/utm.php` | GET | UTM campaign data |
 | `/api/analytics/errors.php` | GET | Error groups with occurrence counts |
+| `/api/analytics/errors-trend.php` | GET | Daily error occurrences over time, top groups |
 | `/api/analytics/error-detail.php` | GET | Single error group with all events |
 | `/api/analytics/audits.php` | GET | Audit log events |
 

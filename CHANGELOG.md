@@ -4,6 +4,18 @@ All notable changes to Micrologs will be documented here.
 
 ---
 
+## [1.2.0] - 2026-03-02
+
+Three new analytics endpoints using existing data - no schema changes, no new tracking required.
+
+### Added
+- **`GET /api/analytics/sessions.php`** - avg session duration (all sessions + engaged-only), avg pages per session, sessions over time daily breakdown.
+- **`GET /api/analytics/visitors-returning.php`** - new vs returning visitors, percentage split, daily breakdown over time. New = `first_seen` within the range. Returning = `first_seen` before the range with activity within it.
+- **`GET /api/analytics/errors-trend.php`** - daily error occurrences over time, top 5 error groups by occurrence, total unique groups affected. Accepts optional `?group_id=` to scope to a single error group.
+
+---
+
+
 ## [1.1.0] - 2026-03-01
 
 Security hardening and performance pass. No breaking changes - drop-in replacement for v1.0.0.
