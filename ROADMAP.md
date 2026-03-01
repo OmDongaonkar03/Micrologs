@@ -33,11 +33,22 @@ Analytics depth - no schema changes, no new tracking.
 - `visitors-returning.php` - new vs returning visitors
 - `errors-trend.php` - daily error occurrences, top groups, single-group filter
 
+### v1.3.0
+Complete API coverage - full project management and error workflows.
+- `projects/list.php` - list all projects with summary stats
+- `projects/toggle.php` - enable/disable a project
+- `projects/regenerate-keys.php` - rotate secret/public keys, old keys invalidated immediately
+- `projects/delete.php` - permanently delete a project (confirmation required)
+- `links/detail.php` - fetch a single link by code with click count
+- `links/edit.php` - edit link destination, label, or active state
+- `track/errors-update-status.php` - update error group status individually or in bulk
+- `error_groups.status` ENUM expanded - added `investigating` between `open` and `resolved`
+
 ---
 
-## Active (v1.2.x)
+## Active (v1.3.x)
 
-Patch releases for security fixes and minor optimizations only. No new features in v1.2.x.
+Patch releases for security fixes and minor optimizations only. No new features in v1.3.x.
 
 - [ ] APCu rate limiter - drop-in replacement for the file-based rate limiter on hosts that support APCu. Atomic, zero filesystem I/O, no race condition.
 
