@@ -4,6 +4,29 @@ All notable changes to Micrologs will be documented here.
 
 ---
 
+## [1.3.0] - 2026-03-02
+
+Complete project management and error workflow APIs.
+
+### Added
+- **`GET /api/projects/list.php`** - List all projects with summary stats (total links, pageviews, errors). Auth: admin key.
+- **`POST /api/projects/toggle.php`** - Enable or disable a project. Disabled projects reject all tracking and analytics requests. Accepts `is_active` bool to set explicitly, or omit to flip current state. Auth: admin key.
+- **`POST /api/projects/regenerate-keys.php`** - Rotate `secret_key`, `public_key`, or both. Old keys are invalidated immediately. Accepts `rotate_secret` and `rotate_public` bools (both default true). Auth: admin key.
+- **`POST /api/projects/delete.php`** - Permanently delete a project and all its data. Requires `"confirm": "<project name>"` as a safety check. Auth: admin key.
+- **`GET /api/links/detail.php`** - Fetch a single tracked link by `?code=` including `total_clicks`. Auth: secret key.
+- **`POST /api/links/edit.php`** - Edit a link's `destination_url`, `label`, or `is_active` by code. All fields optional except `code`. Auth: secret key.
+- **`POST /api/track/errors-update-status.php`** - Mark error groups as `open`, `investigating`, `resolved`, or `ignored`. Accepts single `id` or array of `ids` (max 100 per request). IDs not belonging to the project are skipped and reported in `not_found`. Auth: secret key.
+
+### Changed
+- **`error_groups.status` ENUM expanded** - Added `investigating` between `open` and `resolved`. Run the migration below on existing installs:
+
+```sql
+ALTER TABLE `error_groups`
+  MODIFY `status` ENUM('open','investigating','resolved','ignored') NOT NULL DEFAULT 'open';
+```
+
+---
+
 ## [1.2.0] - 2026-03-02
 
 Three new analytics endpoints using existing data - no schema changes, no new tracking required.

@@ -52,8 +52,12 @@ Most analytics tools make you choose between simplicity and scale, or between fr
 **1. Add the snippet**
 
 ```html
-
-
+<script
+  src="https://yourdomain.com/snippet/micrologs.js"
+  data-public-key="your_public_key"
+  data-environment="production"
+  async>
+</script>
 ```
 
 Pageviews, sessions, devices, locations, and JS errors are now tracked automatically.
@@ -98,6 +102,7 @@ curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
 | v1.0 - REST API | Shipped | Full analytics, error tracking, audit logs, link tracking |
 | v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
 | v1.2 - Analytics Depth | Shipped | Session analytics, new vs returning visitors, error trends over time |
+| v1.3 - Complete API | Shipped | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
 | v2 - Infrastructure | Planned | Valkey/Redis caching, async queue via Symfony Messenger, webhook alerts |
 | v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 

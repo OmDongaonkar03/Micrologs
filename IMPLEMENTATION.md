@@ -188,6 +188,56 @@ curl -X POST https://yourdomain.com/api/projects/edit.php \
   }'
 ```
 
+**List all projects:**
+
+```bash
+curl https://yourdomain.com/api/projects/list.php \
+  -H "X-Admin-Key: your_admin_key"
+```
+
+**Toggle a project** - enable or disable. Disabled projects reject all incoming tracking and analytics requests:
+
+```bash
+# Toggle (flips current state)
+curl -X POST https://yourdomain.com/api/projects/toggle.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{ "id": 1 }'
+
+# Set explicitly
+curl -X POST https://yourdomain.com/api/projects/toggle.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{ "id": 1, "is_active": false }'
+```
+
+**Regenerate keys** - rotate a leaked or compromised key. Old keys are invalidated immediately — update your snippet and server-side callers first:
+
+```bash
+# Rotate both keys (default)
+curl -X POST https://yourdomain.com/api/projects/regenerate-keys.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{ "id": 1 }'
+
+# Rotate only the secret key
+curl -X POST https://yourdomain.com/api/projects/regenerate-keys.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{ "id": 1, "rotate_secret": true, "rotate_public": false }'
+```
+
+**Delete a project** - permanently removes the project and all its data. Requires confirmation:
+
+```bash
+curl -X POST https://yourdomain.com/api/projects/delete.php \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your_admin_key" \
+  -d '{ "id": 1, "confirm": "My Website" }'
+```
+
+The `confirm` value must exactly match the project's name. This is irreversible.
+
 ---
 
 ## 8. Add the Tracking Snippet
@@ -300,7 +350,11 @@ All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
 | `/api/projects/create.php` | POST | X-Admin-Key | Create a new project |
+| `/api/projects/list.php` | GET | X-Admin-Key | List all projects with summary stats |
 | `/api/projects/edit.php` | POST | X-Admin-Key | Edit project name or allowed domains |
+| `/api/projects/toggle.php` | POST | X-Admin-Key | Enable or disable a project |
+| `/api/projects/regenerate-keys.php` | POST | X-Admin-Key | Rotate secret key, public key, or both |
+| `/api/projects/delete.php` | POST | X-Admin-Key | Permanently delete a project and all its data |
 | `/api/projects/verify.php` | POST | None | Verify a public or secret key |
 | `/api/health.php` | GET | None | System health check |
 
@@ -318,6 +372,7 @@ All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 | `/api/analytics/utm.php` | GET | UTM campaign data |
 | `/api/analytics/errors.php` | GET | Error groups with occurrence counts |
 | `/api/analytics/errors-trend.php` | GET | Daily error occurrences over time, top groups |
+| `/api/track/errors-update-status.php` | POST | Mark error groups as open, investigating, resolved, or ignored |
 | `/api/analytics/error-detail.php` | GET | Single error group with all events |
 | `/api/analytics/audits.php` | GET | Audit log events |
 
@@ -337,6 +392,30 @@ All analytics endpoints accept a `range` query param:
 ```
 ?range=30d&status=open&severity=critical&environment=production
 ```
+
+**Update error group status** - mark errors as investigating, resolved, or ignored. Accepts a single ID or a batch of up to 100:
+
+```bash
+# Start investigating a single error group
+curl -X POST https://yourdomain.com/api/track/errors-update-status.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_secret_key" \
+  -d '{ "id": 42, "status": "investigating" }'
+
+# Resolve a single error group
+curl -X POST https://yourdomain.com/api/track/errors-update-status.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_secret_key" \
+  -d '{ "id": 42, "status": "resolved" }'
+
+# Bulk ignore multiple groups
+curl -X POST https://yourdomain.com/api/track/errors-update-status.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_secret_key" \
+  -d '{ "ids": [12, 15, 22], "status": "ignored" }'
+```
+
+Valid statuses: `open` → `investigating` → `resolved` or `ignored`. Reopening a resolved error sets status back to `open`.
 
 **Audits endpoint filters:**
 
@@ -380,6 +459,29 @@ curl -X POST https://yourdomain.com/api/links/create.php \
 curl https://yourdomain.com/api/links/list.php \
   -H "X-API-Key: your_secret_key"
 ```
+
+#### Get a single link
+
+```bash
+curl "https://yourdomain.com/api/links/detail.php?code=aB3xYz12" \
+  -H "X-API-Key: your_secret_key"
+```
+
+#### Edit a link
+
+```bash
+curl -X POST https://yourdomain.com/api/links/edit.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_secret_key" \
+  -d '{
+    "code": "aB3xYz12",
+    "destination_url": "https://example.com/new-page",
+    "label": "Updated CTA",
+    "is_active": false
+  }'
+```
+
+All fields except `code` are optional — pass only what you want to change.
 
 #### Delete a link
 

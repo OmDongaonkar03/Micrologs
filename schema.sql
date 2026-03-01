@@ -88,7 +88,7 @@ CREATE TABLE `error_groups` (
   `line` int(10) UNSIGNED DEFAULT NULL,
   `severity` enum('info','warning','error','critical') NOT NULL DEFAULT 'error',
   `environment` enum('production','staging','development','unknown') NOT NULL DEFAULT 'production',
-  `status` enum('open','resolved','ignored') NOT NULL DEFAULT 'open',
+  `status` enum('open','investigating','resolved','ignored') NOT NULL DEFAULT 'open',
   `occurrence_count` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `first_seen` datetime NOT NULL DEFAULT current_timestamp(),
   `last_seen` datetime NOT NULL DEFAULT current_timestamp()
