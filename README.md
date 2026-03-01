@@ -95,10 +95,10 @@ curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
 
 | Stage | Status | What's included |
 |---|---|---|
-| v1.0 - REST API | ✅ Shipped | Full analytics, error tracking, audit logs, link tracking |
-| v1.1 - Security & Performance | ✅ Shipped | IP spoofing fix, payload caps, query reduction (~10k pageviews/day on shared hosting) |
-| v2 - Performance | 🔜 Planned | Redis caching, async queue, webhook alerts |
-| v3 - Realtime | 🔜 Planned | WebSockets, live dashboard feed |
+| v1.0 - REST API | Shipped | Full analytics, error tracking, audit logs, link tracking |
+| v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction (~10k pageviews/day on shared hosting) |
+| v2 - Performance | Planned | Redis caching, async queue, webhook alerts |
+| v3 - Realtime | Planned | WebSockets, live dashboard feed |
 
 ---
 

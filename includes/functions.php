@@ -10,6 +10,9 @@ require_once __DIR__ . "/../authorization/config.php";
 require_once __DIR__ . "/../utils/vendor/autoload.php"; // For MaxMind GeoIP2
 require_once __DIR__ . "/../utils/rate-limit.php"; // For rate limiting functions
 
+// Unique ID for HTTP requests
+$GLOBALS["request_id"] = substr(bin2hex(random_bytes(4)), 0, 8);
+
 $origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 
 $allowedOrigins =
@@ -62,6 +65,7 @@ function writeLog($level, $message, $context = [])
     }
 
     $timestamp = date("Y-m-d H:i:s");
+    $requestId = $GLOBALS["request_id"] ?? "--------";
     $file = basename(
         debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1)[0]["file"] ?? "unknown"
     );
@@ -74,7 +78,8 @@ function writeLog($level, $message, $context = [])
         : "";
 
     $line =
-        "[{$timestamp}] [{$level}] [{$file}] {$message}{$contextStr}" . PHP_EOL;
+        "[{$timestamp}] [{$level}] [{$requestId}] [{$file}] {$message}{$contextStr}" .
+        PHP_EOL;
 
     file_put_contents($logPath, $line, FILE_APPEND | LOCK_EX);
 }
@@ -137,7 +142,10 @@ function encodeContext($raw, int $maxBytes = 8192): ?string
         return null;
     }
 
-    $encoded = json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $encoded = json_encode(
+        $raw,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
 
     if ($encoded === false || strlen($encoded) > $maxBytes) {
         return null;
@@ -304,10 +312,16 @@ function getClientIp()
         $trustedProxies = array_map("trim", explode(",", TRUSTED_PROXIES));
     }
 
-    if (!empty($trustedProxies) && in_array($remoteAddr, $trustedProxies, true)) {
+    if (
+        !empty($trustedProxies) &&
+        in_array($remoteAddr, $trustedProxies, true)
+    ) {
         if (!empty($_SERVER["HTTP_X_FORWARDED_FOR"])) {
             // XFF chain: "client, proxy1, proxy2" — take the leftmost (real client)
-            $ips = array_map("trim", explode(",", $_SERVER["HTTP_X_FORWARDED_FOR"]));
+            $ips = array_map(
+                "trim",
+                explode(",", $_SERVER["HTTP_X_FORWARDED_FOR"])
+            );
             $clientIp = $ips[0];
             // Basic validation — must look like an IP
             if (filter_var($clientIp, FILTER_VALIDATE_IP)) {
@@ -545,7 +559,7 @@ function parseDateRange()
 
     if ($range === "custom") {
         $from = $_GET["from"] ?? "";
-        $to   = $_GET["to"]   ?? "";
+        $to = $_GET["to"] ?? "";
 
         if (
             empty($from) ||
@@ -553,7 +567,12 @@ function parseDateRange()
             !DateTime::createFromFormat("Y-m-d", $from) ||
             !DateTime::createFromFormat("Y-m-d", $to)
         ) {
-            sendResponse(false, "Invalid date format. Use YYYY-MM-DD", null, 400);
+            sendResponse(
+                false,
+                "Invalid date format. Use YYYY-MM-DD",
+                null,
+                400
+            );
         }
 
         // Prevent full-table scans: cap custom ranges at 365 days
@@ -562,7 +581,12 @@ function parseDateRange()
             sendResponse(false, "'from' must be before 'to'", null, 400);
         }
         if ($diffDays > 365) {
-            sendResponse(false, "Custom date range cannot exceed 365 days", null, 400);
+            sendResponse(
+                false,
+                "Custom date range cannot exceed 365 days",
+                null,
+                400
+            );
         }
     } else {
         $days = (int) filter_var($range, FILTER_SANITIZE_NUMBER_INT);
