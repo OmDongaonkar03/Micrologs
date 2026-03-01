@@ -23,6 +23,7 @@ Security hardening and performance pass. No breaking changes — drop-in replace
 - `readJsonBody(int $maxBytes)` helper in `includes/functions.php`
 - `encodeContext($raw, int $maxBytes)` helper in `includes/functions.php`
 - `TRUSTED_PROXIES` env constant (documented in `.env.example.php`)
+- Log rotation in `writeLog()` — when `micrologs.log` exceeds 10 MB it shifts existing files down (`.1`→`.2`, `.2`→`.3` ... up to `.5`) and starts a fresh log. The oldest file `.5` is deleted. At most 6 files (60 MB) on disk at any time.
 
 ---
 

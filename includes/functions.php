@@ -44,6 +44,23 @@ function writeLog($level, $message, $context = [])
         mkdir($logDir, 0755, true);
     }
 
+    // Rotate if file exceeds 10 MB — keeps last 5 rotated files
+    if (file_exists($logPath) && filesize($logPath) >= 10 * 1024 * 1024) {
+        $maxFiles = 5;
+        // Shift: .5 dropped, .4→.5, .3→.4, .2→.3, .1→.2, then log→.1
+        for ($i = $maxFiles; $i >= 2; $i--) {
+            $older = $logPath . "." . $i;
+            $newer = $logPath . "." . ($i - 1);
+            if ($i === $maxFiles && file_exists($older)) {
+                unlink($older); // drop the oldest
+            }
+            if (file_exists($newer)) {
+                rename($newer, $older);
+            }
+        }
+        rename($logPath, $logPath . ".1");
+    }
+
     $timestamp = date("Y-m-d H:i:s");
     $file = basename(
         debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1)[0]["file"] ?? "unknown"
