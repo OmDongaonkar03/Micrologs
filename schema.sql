@@ -288,7 +288,8 @@ ALTER TABLE `pageviews`
   ADD KEY `idx_created_at` (`created_at`),
   ADD KEY `idx_url` (`project_id`,`url`(255)),
   ADD KEY `idx_referrer_category` (`project_id`,`referrer_category`),
-  ADD KEY `idx_project_created` (`project_id`,`created_at`);
+  ADD KEY `idx_project_created` (`project_id`,`created_at`),
+  ADD KEY `idx_dedup` (`project_id`,`visitor_id`,`url`(255),`created_at`);
 
 --
 -- Indexes for table `projects`

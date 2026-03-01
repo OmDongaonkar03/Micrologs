@@ -15,10 +15,10 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
 rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_verify", 20, 60);
 
-$input = json_decode(file_get_contents("php://input"), true);
+$input = readJsonBody();
 
 if (!$input) {
-    sendResponse(false, "Invalid JSON body", null, 400);
+    sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
 $key = trim($input["key"] ?? "");

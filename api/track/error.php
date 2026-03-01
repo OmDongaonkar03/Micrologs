@@ -19,10 +19,10 @@ rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_errors", 60, 60);
 $project = verifyPublicKey($conn);
 $projectId = (int) $project["id"];
 
-$input = json_decode(file_get_contents("php://input"), true);
+$input = readJsonBody();
 
 if (!$input) {
-    sendResponse(false, "Invalid JSON body", null, 400);
+    sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
 // Inputs
@@ -49,10 +49,7 @@ $environment = in_array($input["environment"] ?? "", [
 ])
     ? $input["environment"]
     : "production";
-$context =
-    isset($input["context"]) && is_array($input["context"])
-        ? json_encode($input["context"])
-        : null;
+$context = encodeContext($input["context"] ?? null);
 
 if (empty($message)) {
     sendResponse(false, "message is required", null, 400);

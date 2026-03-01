@@ -24,4 +24,10 @@
     define("ALLOWED_ORIGINS", "https://example.com,http://localhost:8080");
 
     define("APP_URL", "https://your_domain_url");
+
+    # Trusted reverse proxy IPs (comma-separated).
+    # Only set this if Nginx/Apache sits in front of PHP on the same server.
+    # When empty, X-Forwarded-For is NEVER trusted — prevents IP spoofing.
+    # Example for local proxy: define("TRUSTED_PROXIES", "127.0.0.1");
+    define("TRUSTED_PROXIES", "");
 ?>

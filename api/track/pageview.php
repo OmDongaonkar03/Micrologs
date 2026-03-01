@@ -22,170 +22,155 @@ if (isBot()) {
     exit();
 }
 
-$project = verifyPublicKey($conn);
+$project   = verifyPublicKey($conn);
 $projectId = (int) $project["id"];
 
-$input = json_decode(file_get_contents("php://input"), true);
+// --- Read + validate body (capped at 64 KB) ----------------------
+$input = readJsonBody();
 
 if (!$input) {
-    sendResponse(false, "Invalid JSON body", null, 400);
+    sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
-// Inputs
-$url = substr(trim($input["url"] ?? ""), 0, 2048);
-$pageTitle = substr(trim($input["page_title"] ?? ""), 0, 512);
-$referrerUrl = substr(trim($input["referrer"] ?? ""), 0, 2048);
-$visitorId = substr(trim($input["visitor_id"] ?? ""), 0, 256);
-$fingerprint = substr(trim($input["fingerprint"] ?? ""), 0, 256);
-$sessionToken = substr(trim($input["session_token"] ?? ""), 0, 256);
+$url              = substr(trim($input["url"]               ?? ""), 0, 2048);
+$pageTitle        = substr(trim($input["page_title"]        ?? ""), 0, 512);
+$referrerUrl      = substr(trim($input["referrer"]          ?? ""), 0, 2048);
+$visitorId        = substr(trim($input["visitor_id"]        ?? ""), 0, 256);
+$fingerprint      = substr(trim($input["fingerprint"]       ?? ""), 0, 256);
+$sessionToken     = substr(trim($input["session_token"]     ?? ""), 0, 256);
 $screenResolution = substr(trim($input["screen_resolution"] ?? ""), 0, 20);
-$timezone = substr(trim($input["timezone"] ?? ""), 0, 100);
+$timezone         = substr(trim($input["timezone"]          ?? ""), 0, 100);
 
 if (empty($url) || empty($visitorId) || empty($sessionToken)) {
-    sendResponse(
-        false,
-        "url, visitor_id and session_token are required",
-        null,
-        400
-    );
+    sendResponse(false, "url, visitor_id and session_token are required", null, 400);
 }
 
-// Hashing
-$visitorHash = hash("sha256", $visitorId);
+// --- Hashing -----------------------------------------------------
+$visitorHash     = hash("sha256", $visitorId);
 $fingerprintHash = !empty($fingerprint) ? hash("sha256", $fingerprint) : "";
 
-// Geolocation (server-side only)
-$ip = getClientIp();
-$ipHash = hashIp($ip);
-$geo = geolocate($ip);
-
-// Device
-$ua = $_SERVER["HTTP_USER_AGENT"] ?? "";
-$device = parseUserAgent($ua);
-
-// Referrer + UTM
+// --- Server-side enrichment --------------------------------------
+$ip               = getClientIp();
+$ipHash           = hashIp($ip);
+$geo              = geolocate($ip);
+$ua               = $_SERVER["HTTP_USER_AGENT"] ?? "";
+$device           = parseUserAgent($ua);
 $referrerCategory = categorizeReferrer($referrerUrl);
-$utm = extractUtm($url);
+$utm              = extractUtm($url);
 
-// Resolve visitor (hybrid: cookie + fingerprint fallback)
-$stmt = $conn->prepare(
-    "SELECT id FROM visitors WHERE project_id = ? AND visitor_hash = ? LIMIT 1"
-);
+// === VISITOR (upsert) ============================================
+// Single query: insert new visitor, or update last_seen if exists.
+// On duplicate (project_id + visitor_hash), refresh fingerprint_hash
+// only if it was previously empty (e.g. first visit had no fingerprint).
+$stmt = $conn->prepare("
+    INSERT INTO visitors (project_id, visitor_hash, fingerprint_hash)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+        fingerprint_hash = IF(
+            fingerprint_hash = '' AND VALUES(fingerprint_hash) != '',
+            VALUES(fingerprint_hash),
+            fingerprint_hash
+        ),
+        last_seen = NOW()
+");
 if (!$stmt) {
-    writeLog("ERROR", "visitor SELECT prepare failed", [
-        "error" => $conn->error,
-    ]);
+    writeLog("ERROR", "visitor upsert prepare failed", ["error" => $conn->error]);
     sendResponse(false, "Server error", null, 500);
 }
-$stmt->bind_param("is", $projectId, $visitorHash);
-$stmt->execute();
-$visitor = $stmt->get_result()->fetch_assoc();
+$stmt->bind_param("iss", $projectId, $visitorHash, $fingerprintHash);
+if (!$stmt->execute()) {
+    writeLog("ERROR", "visitor upsert execute failed", ["error" => $stmt->error]);
+    sendResponse(false, "Server error", null, 500);
+}
+$visitorDbId = (int) $conn->insert_id;
 $stmt->close();
 
-if (!$visitor && !empty($fingerprintHash)) {
+// insert_id is 0 on UPDATE (existing row) — fetch the real id
+if ($visitorDbId === 0) {
     $stmt = $conn->prepare(
-        "SELECT id FROM visitors WHERE project_id = ? AND fingerprint_hash = ? LIMIT 1"
+        "SELECT id FROM visitors WHERE project_id = ? AND visitor_hash = ? LIMIT 1"
     );
-    if (!$stmt) {
-        writeLog("ERROR", "visitor fingerprint SELECT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("is", $projectId, $fingerprintHash);
+    $stmt->bind_param("is", $projectId, $visitorHash);
     $stmt->execute();
-    $visitor = $stmt->get_result()->fetch_assoc();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if ($visitor) {
-        // Re-associate cookie hash (cookie was cleared, fingerprint matched)
+    if ($row) {
+        $visitorDbId = (int) $row["id"];
+    } elseif (!empty($fingerprintHash)) {
+        // Cookie was cleared — fingerprint fallback, then re-link visitor_hash
         $stmt = $conn->prepare(
-            "UPDATE visitors SET visitor_hash = ?, last_seen = NOW() WHERE id = ?"
+            "SELECT id FROM visitors WHERE project_id = ? AND fingerprint_hash = ? LIMIT 1"
         );
-        $stmt->bind_param("si", $visitorHash, $visitor["id"]);
+        $stmt->bind_param("is", $projectId, $fingerprintHash);
         $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+
+        if ($row) {
+            $visitorDbId = (int) $row["id"];
+            $stmt = $conn->prepare(
+                "UPDATE visitors SET visitor_hash = ?, last_seen = NOW() WHERE id = ?"
+            );
+            $stmt->bind_param("si", $visitorHash, $visitorDbId);
+            $stmt->execute();
+            $stmt->close();
+        }
     }
 }
 
-if (!$visitor) {
-    $stmt = $conn->prepare(
-        "INSERT INTO visitors (project_id, visitor_hash, fingerprint_hash) VALUES (?, ?, ?)"
-    );
-    if (!$stmt) {
-        writeLog("ERROR", "visitor INSERT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("iss", $projectId, $visitorHash, $fingerprintHash);
-    if (!$stmt->execute()) {
-        writeLog("ERROR", "visitor INSERT execute failed", [
-            "error" => $stmt->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $visitorDbId = (int) $conn->insert_id;
-    $stmt->close();
-} else {
-    $visitorDbId = (int) $visitor["id"];
-    $stmt = $conn->prepare(
-        "UPDATE visitors SET last_seen = NOW() WHERE id = ?"
-    );
-    $stmt->bind_param("i", $visitorDbId);
-    $stmt->execute();
-    $stmt->close();
-}
-
-// Resolve session
-$stmt = $conn->prepare(
-    "SELECT id, last_activity FROM sessions WHERE session_token = ? LIMIT 1"
-);
-if (!$stmt) {
-    writeLog("ERROR", "session SELECT prepare failed", [
-        "error" => $conn->error,
+if ($visitorDbId === 0) {
+    writeLog("ERROR", "could not resolve visitor after upsert", [
+        "project_id"   => $projectId,
+        "visitor_hash" => $visitorHash,
     ]);
     sendResponse(false, "Server error", null, 500);
 }
-$stmt->bind_param("s", $sessionToken);
-$stmt->execute();
-$session = $stmt->get_result()->fetch_assoc();
+
+// === SESSION (upsert) ============================================
+$stmt = $conn->prepare("
+    INSERT INTO sessions (project_id, visitor_id, session_token)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+        last_activity = NOW()
+");
+if (!$stmt) {
+    writeLog("ERROR", "session upsert prepare failed", ["error" => $conn->error]);
+    sendResponse(false, "Server error", null, 500);
+}
+$stmt->bind_param("iis", $projectId, $visitorDbId, $sessionToken);
+if (!$stmt->execute()) {
+    writeLog("ERROR", "session upsert execute failed", ["error" => $stmt->error]);
+    sendResponse(false, "Server error", null, 500);
+}
+$sessionId = (int) $conn->insert_id;
 $stmt->close();
 
-if (!$session) {
+if ($sessionId === 0) {
     $stmt = $conn->prepare(
-        "INSERT INTO sessions (project_id, visitor_id, session_token) VALUES (?, ?, ?)"
+        "SELECT id FROM sessions WHERE session_token = ? LIMIT 1"
     );
-    if (!$stmt) {
-        writeLog("ERROR", "session INSERT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("iis", $projectId, $visitorDbId, $sessionToken);
-    if (!$stmt->execute()) {
-        writeLog("ERROR", "session INSERT execute failed", [
-            "error" => $stmt->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $sessionId = (int) $conn->insert_id;
-    $stmt->close();
-} else {
-    $sessionId = (int) $session["id"];
-    $stmt = $conn->prepare(
-        "UPDATE sessions SET last_activity = NOW() WHERE id = ?"
-    );
-    $stmt->bind_param("i", $sessionId);
+    $stmt->bind_param("s", $sessionToken);
     $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+    $sessionId = $row ? (int) $row["id"] : 0;
 }
 
-// Deduplication - same visitor + same URL within 5 minutes
+if ($sessionId === 0) {
+    writeLog("ERROR", "could not resolve session after upsert", [
+        "project_id"    => $projectId,
+        "session_token" => $sessionToken,
+    ]);
+    sendResponse(false, "Server error", null, 500);
+}
+
+// === DEDUPLICATION ===============================================
+// Same visitor + same URL within 5 minutes = don't double-count
 $stmt = $conn->prepare("
     SELECT id FROM pageviews
     WHERE project_id = ? AND visitor_id = ? AND url = ?
-    AND created_at >= DATE_SUB(NOW(), INTERVAL 300 SECOND)
+      AND created_at >= DATE_SUB(NOW(), INTERVAL 300 SECOND)
     LIMIT 1
 ");
 $stmt->bind_param("iis", $projectId, $visitorDbId, $url);
@@ -197,27 +182,11 @@ if ($duplicate) {
     sendResponse(true, "OK", ["counted" => false]);
 }
 
-// Resolve location + device
+// === LOCATION + DEVICE ===========================================
 $locationId = resolveLocation($conn, $projectId, $geo);
-$deviceId = resolveDevice($conn, $projectId, $device);
+$deviceId   = resolveDevice($conn, $projectId, $device);
 
-// Bounce flag — flip to 0 on 2nd+ pageview in session
-$stmt = $conn->prepare(
-    "SELECT COUNT(*) AS cnt FROM pageviews WHERE session_id = ?"
-);
-$stmt->bind_param("i", $sessionId);
-$stmt->execute();
-$count = (int) $stmt->get_result()->fetch_assoc()["cnt"];
-$stmt->close();
-
-if ($count >= 1) {
-    $stmt = $conn->prepare("UPDATE sessions SET is_bounced = 0 WHERE id = ?");
-    $stmt->bind_param("i", $sessionId);
-    $stmt->execute();
-    $stmt->close();
-}
-
-// Insert pageview
+// === INSERT PAGEVIEW =============================================
 $stmt = $conn->prepare("
     INSERT INTO pageviews
         (project_id, session_id, visitor_id, location_id, device_id,
@@ -228,7 +197,7 @@ $stmt = $conn->prepare("
 ");
 if (!$stmt) {
     writeLog("ERROR", "pageview INSERT prepare failed", [
-        "error" => $conn->error,
+        "error"      => $conn->error,
         "project_id" => $projectId,
     ]);
     sendResponse(false, "Failed to record pageview", null, 500);
@@ -255,11 +224,25 @@ $stmt->bind_param(
 
 if (!$stmt->execute()) {
     writeLog("ERROR", "pageview INSERT execute failed", [
-        "error" => $stmt->error,
+        "error"      => $stmt->error,
         "project_id" => $projectId,
     ]);
     sendResponse(false, "Failed to record pageview", null, 500);
 }
+$stmt->close();
+
+// === BOUNCE FLAG =================================================
+// Flip is_bounced = 0 only if this session now has more than 1 pageview.
+// Runs as a single conditional UPDATE — no separate COUNT query needed.
+$stmt = $conn->prepare("
+    UPDATE sessions
+    SET is_bounced = 0
+    WHERE id = ?
+      AND is_bounced = 1
+      AND (SELECT COUNT(*) FROM pageviews WHERE session_id = ?) > 1
+");
+$stmt->bind_param("ii", $sessionId, $sessionId);
+$stmt->execute();
 $stmt->close();
 
 sendResponse(true, "OK", ["counted" => true]);

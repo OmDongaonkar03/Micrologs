@@ -78,15 +78,22 @@ define("LOG_PATH",        __DIR__ . "/../logs/micrologs.log");
 
 # Comma-separated origins allowed for CORS (include scheme, no trailing slash)
 define("ALLOWED_ORIGINS", "https://yourdomain.com,http://localhost:8080");
+
+# Trusted reverse proxy IPs (comma-separated).
+# Only set this if Nginx/Apache sits in front of PHP on the same server.
+# Leave empty on shared hosting - X-Forwarded-For will be ignored entirely,
+# which prevents IP spoofing of the rate limiter and GeoIP.
+# Example for local proxy: define("TRUSTED_PROXIES", "127.0.0.1");
+define("TRUSTED_PROXIES", "");
 ```
 
-> **Generate secure keys** — run this in PHP once:
+> **Generate secure keys** - run this in PHP once:
 > ```php
 > echo bin2hex(random_bytes(32));
 > ```
 > Use a separate output for `ADMIN_KEY` and `IP_HASH_SALT`.
 
-> **Note on `Geo_IP2_LICENSE_KEY`** — this constant is not used at runtime. It is only needed when downloading the GeoLite2 database file (see Step 5). You do not need to define it in `env.php`.
+> **Note on `Geo_IP2_LICENSE_KEY`** - this constant is not used at runtime. It is only needed when downloading the GeoLite2 database file (see Step 5). You do not need to define it in `env.php`.
 
 ---
 
@@ -155,7 +162,7 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
 ```json
 {
   "success": true,
-  "message": "Project created. Store your secret_key safely — it will not be shown again.",
+  "message": "Project created. Store your secret_key safely - it will not be shown again.",
   "data": {
     "id": 1,
     "name": "My Website",
@@ -166,9 +173,9 @@ curl -X POST https://yourdomain.com/api/projects/create.php \
 }
 ```
 
-> Store the `secret_key` immediately — it is never shown again.
+> Store the `secret_key` immediately - it is never shown again.
 
-**Edit a project** — update name and/or allowed domains anytime:
+**Edit a project** - update name and/or allowed domains anytime:
 
 ```bash
 curl -X POST https://yourdomain.com/api/projects/edit.php \
@@ -198,7 +205,7 @@ Add this to every page you want to track, before `</body>`:
 
 That's it. Pageviews, sessions, devices, locations, and errors are now being tracked automatically.
 
-**Optional — if your API lives on a different domain:**
+**Optional - if your API lives on a different domain:**
 
 ```html
 <script
@@ -212,9 +219,9 @@ That's it. Pageviews, sessions, devices, locations, and errors are now being tra
 
 **Framework integration:**
 
-For React/Vue/Svelte — add once in your root `index.html`.
+For React/Vue/Svelte - add once in your root `index.html`.
 
-For Next.js — add in `layout.tsx` using `next/script`:
+For Next.js - add in `layout.tsx` using `next/script`:
 
 ```jsx
 <Script
@@ -229,15 +236,15 @@ For Next.js — add in `layout.tsx` using `next/script`:
 
 ## 9. Error Tracking
 
-Errors are auto-caught from the snippet — no extra setup needed. The snippet listens to `window.onerror` and `unhandledrejection` automatically.
+Errors are auto-caught from the snippet - no extra setup needed. The snippet listens to `window.onerror` and `unhandledrejection` automatically.
 
-**Manual error — from JS:**
+**Manual error - from JS:**
 
 ```js
 Micrologs.error("Payment failed", { order_id: 123, amount: 2999 }, "critical");
 ```
 
-**Manual error — from any backend (one HTTP call):**
+**Manual error - from any backend (one HTTP call):**
 
 ```bash
 curl -X POST https://yourdomain.com/api/track/error.php \
@@ -255,7 +262,7 @@ curl -X POST https://yourdomain.com/api/track/error.php \
   }'
 ```
 
-Works with any backend — PHP, Node, Python, Laravel, Django, anything that can make an HTTP request.
+Works with any backend - PHP, Node, Python, Laravel, Django, anything that can make an HTTP request.
 
 ---
 
@@ -320,7 +327,7 @@ All analytics endpoints accept a `range` query param:
 ?range=custom&from=2025-01-01&to=2025-01-31
 ```
 
-> For `range=custom`, both `from` and `to` are required and must be valid `YYYY-MM-DD` dates. Invalid or missing values return `400`.
+> For `range=custom`, both `from` and `to` are required and must be valid `YYYY-MM-DD` dates. The range cannot exceed 365 days and `from` must be before `to`. Invalid values return `400`.
 
 **Errors endpoint filters:**
 
@@ -414,7 +421,7 @@ curl https://yourdomain.com/api/health.php
   "checks": {
     "php":         { "status": "ok",   "version": "8.2.12", "message": "PHP 8.2.12" },
     "database":    { "status": "ok",   "message": "Connected" },
-    "geoip":       { "status": "warn", "message": "GeoLite2-City.mmdb not found — location tracking disabled" },
+    "geoip":       { "status": "warn", "message": "GeoLite2-City.mmdb not found - location tracking disabled" },
     "rate_limiter":{ "status": "ok",   "message": "rate_limits and rate_blocks directories are writable" }
   }
 }
@@ -426,27 +433,29 @@ Returns `200` when healthy, `503` when any critical check fails. `warn` status d
 
 ## 12. Key Concepts
 
-**Public Key** — used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domains` list.
+**Public Key** - used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domains` list.
 
-**Secret Key** — used server-side only for analytics and link management. Never expose in frontend code.
+**Secret Key** - used server-side only for analytics and link management. Never expose in frontend code.
 
-**Allowed Domains** — one or more domains that are permitted to send data using the public key. Requests from unlisted domains are rejected. Supports subdomains automatically.
+**Allowed Domains** - one or more domains that are permitted to send data using the public key. Requests from unlisted domains are rejected. Supports subdomains automatically.
 
-**Visitor ID** — stored in a cookie (`_ml_vid`) for 365 days. If the cookie is cleared, the canvas fingerprint is used to re-identify the visitor.
+**Visitor ID** - stored in a cookie (`_ml_vid`) for 365 days. If the cookie is cleared, the canvas fingerprint is used to re-identify the visitor.
 
-**Session** — tracked via `sessionStorage`. A new session starts if 30 minutes pass with no activity.
+**Session** - tracked via `sessionStorage`. A new session starts if 30 minutes pass with no activity.
 
-**Error Grouping** — errors are fingerprinted by `type + message + file + line`. Same error fired 1000 times = 1 group, 1000 occurrences. If a resolved error fires again it automatically reopens.
+**Error Grouping** - errors are fingerprinted by `type + message + file + line`. Same error fired 1000 times = 1 group, 1000 occurrences. If a resolved error fires again it automatically reopens.
 
-**Bot Filtering** — requests from known bots, crawlers, and headless browsers are automatically ignored.
+**Bot Filtering** - requests from known bots, crawlers, and headless browsers are automatically ignored.
 
-**Deduplication** — the same visitor hitting the same URL within 5 minutes is counted only once.
+**Deduplication** - the same visitor hitting the same URL within 5 minutes is counted only once.
 
 ---
 
 ## Security Notes
 
-- Never commit `authorization/env.php` — it is gitignored by default
+- Never commit `authorization/env.php` - it is gitignored by default
 - Never expose your `secret_key` in frontend code
-- The `ADMIN_KEY` is only needed for project creation and editing — keep it private
-- IPs are never stored raw — they are hashed with your `IP_HASH_SALT` immediately on ingestion
+- The `ADMIN_KEY` is only needed for project creation and editing - keep it private
+- IPs are never stored raw - they are hashed with your `IP_HASH_SALT` immediately on ingestion
+- On shared hosting, leave `TRUSTED_PROXIES` empty - `X-Forwarded-For` will be completely ignored, preventing IP spoofing of the rate limiter and GeoIP lookup
+- On a VPS with Nginx in front of PHP-FPM, set `TRUSTED_PROXIES` to `127.0.0.1` so real client IPs are correctly read through the proxy

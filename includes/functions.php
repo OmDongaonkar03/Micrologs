@@ -32,7 +32,6 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
 }
 
 // LOGGING
-
 function writeLog($level, $message, $context = [])
 {
     $logPath = defined("LOG_PATH")
@@ -85,8 +84,51 @@ function sendResponse($success, $message, $data = null, $status = 200)
     exit();
 }
 
-// API KEY AUTH
+// REQUEST BODY
 
+/**
+ * Read and decode the JSON request body with a hard size cap.
+ * Prevents DoS via oversized payloads.
+ *
+ * @param int $maxBytes Default 65 536 (64 KB) — enough for any tracking payload
+ */
+function readJsonBody(int $maxBytes = 65536): ?array
+{
+    $raw = file_get_contents("php://input", false, null, 0, $maxBytes + 1);
+
+    if ($raw === false || $raw === "") {
+        return null;
+    }
+
+    if (strlen($raw) > $maxBytes) {
+        sendResponse(false, "Payload too large", null, 413);
+    }
+
+    $decoded = json_decode($raw, true);
+
+    return is_array($decoded) ? $decoded : null;
+}
+
+/**
+ * Encode and cap context JSON to prevent huge blobs in the DB.
+ * Returns null if empty / not an array / too large after encoding.
+ */
+function encodeContext($raw, int $maxBytes = 8192): ?string
+{
+    if (!isset($raw) || !is_array($raw)) {
+        return null;
+    }
+
+    $encoded = json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($encoded === false || strlen($encoded) > $maxBytes) {
+        return null;
+    }
+
+    return $encoded;
+}
+
+// API KEY AUTH
 function verifyPublicKey($conn)
 {
     $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
@@ -232,11 +274,30 @@ function isBot()
 
 function getClientIp()
 {
-    if (!empty($_SERVER["HTTP_X_FORWARDED_FOR"])) {
-        $ips = explode(",", $_SERVER["HTTP_X_FORWARDED_FOR"]);
-        return trim($ips[0]);
+    $remoteAddr = $_SERVER["REMOTE_ADDR"] ?? "";
+
+    // Only trust X-Forwarded-For if the direct connection comes from a known
+    // trusted proxy (e.g. Nginx/Apache on the same machine, or a CDN IP).
+    // Define TRUSTED_PROXIES as a comma-separated list of IPs/CIDRs in env.php.
+    // If not defined or empty, we never trust XFF — preventing IP spoofing.
+    $trustedProxies = [];
+    if (defined("TRUSTED_PROXIES") && TRUSTED_PROXIES !== "") {
+        $trustedProxies = array_map("trim", explode(",", TRUSTED_PROXIES));
     }
-    return $_SERVER["REMOTE_ADDR"] ?? "";
+
+    if (!empty($trustedProxies) && in_array($remoteAddr, $trustedProxies, true)) {
+        if (!empty($_SERVER["HTTP_X_FORWARDED_FOR"])) {
+            // XFF chain: "client, proxy1, proxy2" — take the leftmost (real client)
+            $ips = array_map("trim", explode(",", $_SERVER["HTTP_X_FORWARDED_FOR"]));
+            $clientIp = $ips[0];
+            // Basic validation — must look like an IP
+            if (filter_var($clientIp, FILTER_VALIDATE_IP)) {
+                return $clientIp;
+            }
+        }
+    }
+
+    return $remoteAddr;
 }
 
 function hashIp($ip)
@@ -462,7 +523,7 @@ function parseDateRange()
 
     if ($range === "custom") {
         $from = $_GET["from"] ?? "";
-        $to = $_GET["to"] ?? "";
+        $to   = $_GET["to"]   ?? "";
 
         if (
             empty($from) ||
@@ -470,12 +531,16 @@ function parseDateRange()
             !DateTime::createFromFormat("Y-m-d", $from) ||
             !DateTime::createFromFormat("Y-m-d", $to)
         ) {
-            sendResponse(
-                false,
-                "Invalid date format. Use YYYY-MM-DD",
-                null,
-                400
-            );
+            sendResponse(false, "Invalid date format. Use YYYY-MM-DD", null, 400);
+        }
+
+        // Prevent full-table scans: cap custom ranges at 365 days
+        $diffDays = (strtotime($to) - strtotime($from)) / 86400;
+        if ($diffDays < 0) {
+            sendResponse(false, "'from' must be before 'to'", null, 400);
+        }
+        if ($diffDays > 365) {
+            sendResponse(false, "Custom date range cannot exceed 365 days", null, 400);
         }
     } else {
         $days = (int) filter_var($range, FILTER_SANITIZE_NUMBER_INT);

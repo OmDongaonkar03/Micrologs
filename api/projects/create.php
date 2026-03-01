@@ -20,10 +20,10 @@ if (empty($adminKey) || $adminKey !== ADMIN_KEY) {
     sendResponse(false, "Unauthorized", null, 401);
 }
 
-$input = json_decode(file_get_contents("php://input"), true);
+$input = readJsonBody();
 
 if (!$input) {
-    sendResponse(false, "Invalid JSON body", null, 400);
+    sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
 $name = trim($input["name"] ?? "");

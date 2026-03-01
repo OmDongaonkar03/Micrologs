@@ -19,10 +19,10 @@ rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_links_create", 30, 60);
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 
-$input = json_decode(file_get_contents("php://input"), true);
+$input = readJsonBody();
 
 if (!$input) {
-    sendResponse(false, "Invalid JSON body", null, 400);
+    sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
 $destinationUrl = trim($input["destination_url"] ?? "");
