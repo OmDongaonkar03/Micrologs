@@ -32,6 +32,7 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
 }
 
 // LOGGING
+
 function writeLog($level, $message, $context = [])
 {
     $logPath = defined("LOG_PATH")
@@ -129,6 +130,7 @@ function encodeContext($raw, int $maxBytes = 8192): ?string
 }
 
 // API KEY AUTH
+
 function verifyPublicKey($conn)
 {
     $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
@@ -327,9 +329,12 @@ function geolocate($ip)
     }
 
     try {
-        $reader = new \MaxMind\Db\Reader($dbPath);
+        static $reader = null;
+        if ($reader === null) {
+            $reader = new \MaxMind\Db\Reader($dbPath);
+        }
+
         $record = $reader->get($ip);
-        $reader->close();
 
         if (!$record) {
             return $default;

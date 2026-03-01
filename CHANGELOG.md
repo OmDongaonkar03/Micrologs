@@ -6,17 +6,18 @@ All notable changes to Micrologs will be documented here.
 
 ## [1.1.0] - 2026-03-01
 
-Security hardening and performance pass. No breaking changes - drop-in replacement for v1.0.0.
+Security hardening and performance pass. No breaking changes — drop-in replacement for v1.0.0.
 
 ### Security
-- **Fixed IP spoofing via `X-Forwarded-For`** - `getClientIp()` no longer blindly trusts the `XFF` header. It is now only honoured when the request originates from an IP listed in the new `TRUSTED_PROXIES` env constant. On shared hosting with no proxy in front, leave it empty and `XFF` is ignored entirely. This prevents attackers from spoofing the rate limiter or poisoning GeoIP data.
-- **Bounded request body size** - all endpoints previously read `php://input` without a size cap. A new `readJsonBody()` helper enforces a hard 64 KB limit and returns `413` on oversized payloads, closing a trivial DoS vector.
-- **Bounded context field size** - the `context` JSON field in error and audit events is now capped at 8 KB after encoding via `encodeContext()`. Oversized context is silently dropped rather than stored.
-- **Custom date range validation** - custom analytics date ranges are now capped at 365 days and validated that `from` is before `to`, preventing full-table scan queries.
+- **Fixed IP spoofing via `X-Forwarded-For`** — `getClientIp()` no longer blindly trusts the `XFF` header. It is now only honoured when the request originates from an IP listed in the new `TRUSTED_PROXIES` env constant. On shared hosting with no proxy in front, leave it empty and `XFF` is ignored entirely. This prevents attackers from spoofing the rate limiter or poisoning GeoIP data.
+- **Bounded request body size** — all endpoints previously read `php://input` without a size cap. A new `readJsonBody()` helper enforces a hard 64 KB limit and returns `413` on oversized payloads, closing a trivial DoS vector.
+- **Bounded context field size** — the `context` JSON field in error and audit events is now capped at 8 KB after encoding via `encodeContext()`. Oversized context is silently dropped rather than stored.
+- **Custom date range validation** — custom analytics date ranges are now capped at 365 days and validated that `from` is before `to`, preventing full-table scan queries.
 
 ### Performance
-- **`pageview.php` query count reduced from ~15 to 6–8** - visitor and session writes now use `INSERT ... ON DUPLICATE KEY UPDATE` instead of SELECT-then-INSERT pairs. The bounce flag update is now a single conditional `UPDATE` with an inline subquery instead of a separate `COUNT(*)` query.
-- **Added `idx_dedup` composite index** on `pageviews (project_id, visitor_id, url(255), created_at)` - speeds up the 5-minute deduplication check on large tables.
+- **GeoIP reader cached as static variable** — `geolocate()` no longer opens and closes `GeoLite2-City.mmdb` on every request. The reader is instantiated once per PHP-FPM process and reused, saving 20–80ms per tracking call.
+- **`pageview.php` query count reduced from ~15 to 6–8** — visitor and session writes now use `INSERT ... ON DUPLICATE KEY UPDATE` instead of SELECT-then-INSERT pairs. The bounce flag update is now a single conditional `UPDATE` with an inline subquery instead of a separate `COUNT(*)` query.
+- **Added `idx_dedup` composite index** on `pageviews (project_id, visitor_id, url(255), created_at)` — speeds up the 5-minute deduplication check on large tables.
 
 ### Added
 - `readJsonBody(int $maxBytes)` helper in `includes/functions.php`
@@ -37,7 +38,7 @@ Initial release.
 - Referrer source categorization (organic, social, email, referral, direct)
 - UTM campaign tracking
 - Top pages analytics
-- JS error monitoring - auto-caught via `window.onerror` and `unhandledrejection`
+- JS error monitoring — auto-caught via `window.onerror` and `unhandledrejection`
 - Manual error tracking from any backend over HTTP
 - Error grouping by fingerprint with occurrence counts
 - Audit logging
