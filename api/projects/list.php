@@ -30,7 +30,7 @@ $stmt = $conn->prepare("
     FROM projects p
     LEFT JOIN tracked_links tl ON tl.project_id = p.id
     LEFT JOIN pageviews pv      ON pv.project_id = p.id
-    LEFT JOIN error_logs el     ON el.project_id = p.id
+    LEFT JOIN error_groups el   ON el.project_id = p.id
     GROUP BY p.id
     ORDER BY p.created_at DESC
 ");

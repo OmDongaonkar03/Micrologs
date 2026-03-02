@@ -44,6 +44,12 @@ Complete API coverage - full project management and error workflows.
 - `track/errors-update-status.php` - update error group status individually or in bulk
 - `error_groups.status` ENUM expanded - added `investigating` between `open` and `resolved`
 
+### @micrologs/node v1.0.0
+Official Node.js SDK — zero dependencies, Node 18+, silent on failure.
+- Wraps every engine endpoint: tracking, link management, analytics
+- `npm install @micrologs/node`
+- [npmjs.com/package/@micrologs/node](https://www.npmjs.com/package/@micrologs/node)
+
 ---
 
 ## Active (v1.3.x)
@@ -66,7 +72,6 @@ Target: VPS, ~100k pageviews/day ceiling.
 - [ ] Health endpoint extended with queue depth and worker status
 
 ### v2.x - SDKs
-- [ ] Node.js SDK - wraps all track + analytics endpoints
 - [ ] Python SDK
 - [ ] Laravel SDK - first-class Laravel integration
 - [ ] WordPress plugin - one-click install for WP sites

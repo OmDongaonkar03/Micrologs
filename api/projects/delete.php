@@ -90,7 +90,7 @@ $directTables = [
     "tracked_links",
     "pageviews",
     "sessions",
-    "error_logs",
+    "error_groups",
     "audit_logs",
 ];
 foreach ($directTables as $table) {
