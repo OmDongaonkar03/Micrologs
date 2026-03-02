@@ -23,7 +23,7 @@ $range = parseDateRange();
 $limit = min(100, max(1, (int) ($_GET["limit"] ?? 50)));
 
 // Optional filters
-$status = in_array($_GET["status"] ?? "", ["open", "resolved", "ignored"])
+$status = in_array($_GET["status"] ?? "", ["open", "investigating", "resolved", "ignored"])
     ? $_GET["status"]
     : null;
 $severity = in_array($_GET["severity"] ?? "", [
@@ -101,6 +101,7 @@ $stmt = $conn->prepare("
     SELECT
         COUNT(*) AS total,
         SUM(status = 'open') AS open,
+        SUM(status = 'investigating') AS investigating,
         SUM(status = 'resolved') AS resolved,
         SUM(status = 'ignored') AS ignored,
         SUM(severity = 'critical') AS critical,
@@ -118,6 +119,7 @@ sendResponse(true, "Errors fetched successfully", [
     "summary" => [
         "total" => (int) $summary["total"],
         "open" => (int) $summary["open"],
+        "investigating" => (int) $summary["investigating"],
         "resolved" => (int) $summary["resolved"],
         "ignored" => (int) $summary["ignored"],
         "critical" => (int) $summary["critical"],
@@ -126,3 +128,4 @@ sendResponse(true, "Errors fetched successfully", [
     "count" => count($errors),
     "errors" => $errors,
 ]);
+?>
