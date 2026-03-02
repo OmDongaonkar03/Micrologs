@@ -113,7 +113,6 @@ curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
 See [CONTRIBUTING.md](CONTRIBUTING.md) - issues and PRs are welcome.
 
 Looking for contributors especially for:
-- Laravel SDK
 - APCu rate limiter for hosts that support it
 
 ---

@@ -56,6 +56,13 @@ Official Python SDK - zero dependencies, Python 3.8+, sync, silent on failure.
 - `pip install micrologs`
 - [pypi.org/project/micrologs](https://pypi.org/project/micrologs/)
 
+### micrologs/laravel v0.1.0
+Official Laravel SDK - service provider, facade, auto-discovery, TrackErrors middleware. Laravel 10, 11, 12.
+- Wraps every engine endpoint: tracking, link management, analytics
+- Automatic exception capture with request context via `TrackErrors` middleware
+- `composer require micrologs/laravel`
+- [packagist.org/packages/micrologs/laravel](https://packagist.org/packages/micrologs/laravel)
+
 ---
 
 ## Active (v1.3.x)
@@ -77,8 +84,7 @@ Target: VPS, ~100k pageviews/day ceiling.
 - [ ] Worker process management and monitoring
 - [ ] Health endpoint extended with queue depth and worker status
 
-### v2.x - SDKs
-- [ ] Laravel SDK - first-class Laravel integration
+### v2.x - Plugins
 - [ ] WordPress plugin - one-click install for WP sites
 
 ### v3.0.0 - Realtime
