@@ -4,6 +4,22 @@ All notable changes to Micrologs will be documented here.
 
 ---
 
+## [1.3.1] - 2026-03-03
+
+### Added
+- `setup.php` — browser-based setup wizard. Tests DB connection, imports schema, creates first project, and outputs the tracking snippet ready to copy. Delete it after use.
+
+### Fixed
+- `GET /api/analytics/errors.php` - `status=investigating` filter was silently dropped, returning all statuses instead. Added `investigating` to the allowlist.
+- `GET /api/analytics/errors.php` - summary counts were missing `investigating`. Response now includes all four status counts: `open`, `investigating`, `resolved`, `ignored`.
+
+### Changed
+- `composer install` now runs from the project root. A root `composer.json` sets `vendor-dir` to `utils/vendor` so the internal structure is unchanged.
+- `authorization/.env.example.php` - key generation command added inline next to `ADMIN_KEY` and `IP_HASH_SALT` so users don't have to hunt for it in the docs.
+- `IMPLEMENTATION.md` - GeoIP setup step now clearly marked as optional. Key generation note updated. Composer step simplified. Setup wizard documented.
+
+---
+
 ## [1.3.0] - 2026-03-02
 
 Complete project management and error workflow APIs.
