@@ -1,0 +1,8 @@
+{
+  "require": {
+    "maxmind-db/reader": "^1.13"
+  },
+  "config": {
+    "vendor-dir": "utils/vendor"
+  }
+}

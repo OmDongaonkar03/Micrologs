@@ -28,22 +28,20 @@ cd Micrologs
 ## 2. Install Dependencies
 
 ```bash
-cd utils
 composer install
-cd ..
 ```
 
 ---
 
 ## 3. Set Up the Database
 
-Create a new MySQL database, then import the schema:
+Create a new MySQL database:
 
 ```sql
 CREATE DATABASE micrologs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-Import the schema file:
+The schema is imported automatically by `setup.php` in Step 7. If you prefer to import it manually instead:
 
 ```bash
 mysql -u your_user -p micrologs < schema.sql
@@ -87,17 +85,19 @@ define("ALLOWED_ORIGINS", "https://yourdomain.com,http://localhost:8080");
 define("TRUSTED_PROXIES", "");
 ```
 
-> **Generate secure keys** - run this in PHP once:
+> **Generate secure keys** — run this twice in PHP (once per key):
 > ```php
 > echo bin2hex(random_bytes(32));
 > ```
-> Use a separate output for `ADMIN_KEY` and `IP_HASH_SALT`.
+> Use one output for `ADMIN_KEY` and a separate output for `IP_HASH_SALT`. Never use the same value for both.
 
 > **Note on `Geo_IP2_LICENSE_KEY`** - this constant is not used at runtime. It is only needed when downloading the GeoLite2 database file (see Step 5). You do not need to define it in `env.php`.
 
 ---
 
-## 5. Set Up GeoIP
+## 5. Set Up GeoIP (Optional)
+
+GeoIP enables country, region, and city breakdown in analytics. Everything else works without it — the health check will show a `warn` status but no errors.
 
 1. Sign up for a free account at [maxmind.com](https://www.maxmind.com/en/geolite2/signup)
 2. Go to **Account → Manage License Keys → Create New License Key**
@@ -145,7 +145,23 @@ chmod 755 utils/rate_limits utils/rate_blocks
 
 ## 7. Create Your First Project
 
-Send a `POST` request to `/api/projects/create.php` with the `X-Admin-Key` header:
+**The easiest way — open `setup.php` in your browser:**
+
+```
+https://yourdomain.com/setup.php
+```
+
+The wizard will:
+1. Test your database connection
+2. Import the schema (creates all tables)
+3. Create your first project
+4. Show your secret key, public key, and a ready-to-paste tracking snippet
+
+> **Delete `setup.php` immediately after use.** It has no authentication — anyone who can reach it can create projects in your database.
+
+---
+
+**Alternatively, use the API directly:**
 
 ```bash
 curl -X POST https://yourdomain.com/api/projects/create.php \

@@ -8,6 +8,7 @@
     define("APP_TIMEZONE", "+05:30");
     define("TIMEZONE", "Asia/Kolkata");
 
+    # Generate a secure value by running this once in PHP: echo bin2hex(random_bytes(32));
     define(
         "IP_HASH_SALT",
         "your_random_salt_for_ip_hashing"
@@ -18,6 +19,8 @@
 	
 	define("LOG_PATH", __DIR__ . "/../logs/micrologs.log");
 
+    # Generate a secure value by running this once in PHP: echo bin2hex(random_bytes(32));
+    # Use a different output than IP_HASH_SALT above.
     define("ADMIN_KEY", "your_secure_admin_key");
 
     # CORS — comma-separated list of allowed origins (include scheme, e.g. https://example.com)

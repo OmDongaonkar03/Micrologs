@@ -101,7 +101,7 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | SDK | Package | Version | Install |
 |---|---|---|---|
-| Node.js | [@micrologs/node](https://www.npmjs.com/package/@micrologs/node) | v1.1.0 | `npm install @micrologs/node` |
+| Node.js | [@micrologs/node](https://www.npmjs.com/package/@micrologs/node) | v1.0.0 | `npm install @micrologs/node` |
 | Python | [micrologs](https://pypi.org/project/micrologs) | v1.0.0 | `pip install micrologs` |
 | Laravel | [micrologs/laravel](https://packagist.org/packages/micrologs/laravel) | v1.0.0 | `composer require micrologs/laravel` |
 
@@ -109,7 +109,7 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Engine | Node SDK | Python SDK | Laravel SDK |
 |---|---|---|---|
-| v1.3.0 *(current)* | v1.1.0 | v1.0.0 | v1.0.0 |
+| v1.3.0 *(current)* | v1.0.0 | v1.0.0 | v1.0.0 |
 
 ---
 
