@@ -25,6 +25,15 @@ if (!$groupId) {
     sendResponse(false, "id is required", null, 400);
 }
 
+// ── Cache lookup ─────────────────────────────────────────────────
+// Keyed by group ID + range. 2-minute TTL — someone drilling into
+// a specific error likely wants fresher data than a 30d aggregate.
+$cacheKey = "analytics:error-detail:{$projectId}:{$groupId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Error detail fetched successfully", $cached);
+}
+
 // Fetch error group
 $stmt = $conn->prepare("
     SELECT id, error_type, message, file, line, severity, environment,
@@ -104,7 +113,7 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Error detail fetched successfully", [
+$data = [
     "range" => $range,
     "group" => [
         "id" => (int) $group["id"],
@@ -121,4 +130,7 @@ sendResponse(true, "Error detail fetched successfully", [
     ],
     "over_time" => $overTime,
     "events" => $events,
-]);
+];
+cacheSet($cacheKey, $data, 120);
+sendResponse(true, "Error detail fetched successfully", $data);
+?>

@@ -22,9 +22,21 @@ $projectId = (int) $project["id"];
 $range = parseDateRange();
 $limit = min(200, max(1, (int) ($_GET["limit"] ?? 50)));
 
+// ── Cache lookup ─────────────────────────────────────────────────
+// action and actor are free-text filters — include them in the key
+// so filtered and unfiltered results are cached independently.
+$action = trim($_GET["action"] ?? "");
+$actor = trim($_GET["actor"] ?? "");
+$cacheKey =
+    "analytics:audits:{$projectId}:{$range["from"]}:{$range["to"]}:" .
+    md5($action . "|" . $actor);
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Audit logs fetched successfully", $cached);
+}
+
+// Cache miss — run queries
 // Optional filters
-$action = trim($_GET["action"] ?? ""); // e.g. user.login
-$actor = trim($_GET["actor"] ?? ""); // e.g. user@email.com
 
 // Build query dynamically
 $where = "project_id = ? AND created_at BETWEEN ? AND ?";
@@ -91,9 +103,12 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Audit logs fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($logs),
     "top_actions" => $topActions,
     "logs" => $logs,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Audit logs fetched successfully", $data);
+?>

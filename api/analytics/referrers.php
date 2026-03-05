@@ -20,6 +20,13 @@ $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:referrers:{$projectId}:{$range['from']}:{$range['to']}";
+$cached   = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Referrers fetched successfully", $cached);
+}
+
 // By category
 $stmt = $conn->prepare("
     SELECT referrer_category,
@@ -65,8 +72,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Referrers fetched successfully", [
-    "range" => $range,
-    "by_category" => $byCategory,
+$data = [
+    "range"         => $range,
+    "by_category"   => $byCategory,
     "top_referrers" => $topReferrers,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Referrers fetched successfully", $data);
+?>

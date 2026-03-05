@@ -20,6 +20,13 @@ $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:links:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Link analytics fetched successfully", $cached);
+}
+
 $baseUrl = defined("APP_URL") ? rtrim(APP_URL, "/") : "";
 
 $stmt = $conn->prepare("
@@ -52,8 +59,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Link analytics fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($links),
     "links" => $links,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Link analytics fetched successfully", $data);
+?>

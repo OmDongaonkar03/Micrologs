@@ -21,6 +21,13 @@ $projectId = (int) $project["id"];
 $range = parseDateRange();
 $limit = min(100, max(1, (int) ($_GET["limit"] ?? 20)));
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:pages:{$projectId}:{$range["from"]}:{$range["to"]}:{$limit}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Pages fetched successfully", $cached);
+}
+
 $stmt = $conn->prepare("
     SELECT url, page_title,
            COUNT(*) AS pageviews,
@@ -46,8 +53,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Pages fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($pages),
     "pages" => $pages,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Pages fetched successfully", $data);
+?>

@@ -93,6 +93,11 @@ writeLog("INFO", "Project {$stateLabel}", [
     "is_active" => (bool) $newState,
 ]);
 
+// Bust all analytics cache for this project.
+// If disabled — cached analytics would still serve even though the project
+// is now inactive. If re-enabled — stale data from before the disable clears out.
+cacheBustProject($projectId);
+
 sendResponse(
     true,
     "Project \"{$project["name"]}\" {$stateLabel} successfully.",

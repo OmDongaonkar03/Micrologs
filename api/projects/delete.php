@@ -127,6 +127,10 @@ writeLog("INFO", "Project deleted", [
     "project_name" => $project["name"],
 ]);
 
+// Bust all analytics cache for this project.
+// The project and its data are gone — any cached responses are now wrong.
+cacheBustProject($projectId);
+
 sendResponse(
     true,
     "Project \"" .

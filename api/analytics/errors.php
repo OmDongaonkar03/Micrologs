@@ -22,8 +22,26 @@ $projectId = (int) $project["id"];
 $range = parseDateRange();
 $limit = min(100, max(1, (int) ($_GET["limit"] ?? 50)));
 
+// ── Cache lookup ─────────────────────────────────────────────────
+// Key includes all active filters so different filter combinations
+// get their own independent cache entries.
+$status = trim($_GET["status"] ?? "");
+$severity = trim($_GET["severity"] ?? "");
+$environment = trim($_GET["environment"] ?? "");
+$cacheKey = "analytics:errors:{$projectId}:{$range["from"]}:{$range["to"]}:{$status}:{$severity}:{$environment}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Errors fetched successfully", $cached);
+}
+
+// Cache miss — validate filters and run queries
 // Optional filters
-$status = in_array($_GET["status"] ?? "", ["open", "investigating", "resolved", "ignored"])
+$status = in_array($_GET["status"] ?? "", [
+    "open",
+    "investigating",
+    "resolved",
+    "ignored",
+])
     ? $_GET["status"]
     : null;
 $severity = in_array($_GET["severity"] ?? "", [
@@ -114,7 +132,7 @@ $stmt->execute();
 $summary = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-sendResponse(true, "Errors fetched successfully", [
+$data = [
     "range" => $range,
     "summary" => [
         "total" => (int) $summary["total"],
@@ -127,5 +145,8 @@ sendResponse(true, "Errors fetched successfully", [
     ],
     "count" => count($errors),
     "errors" => $errors,
-]);
+];
+// Use shorter TTL for errors — status changes should surface quickly
+cacheSet($cacheKey, $data, 120);
+sendResponse(true, "Errors fetched successfully", $data);
 ?>

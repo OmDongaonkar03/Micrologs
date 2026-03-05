@@ -44,6 +44,16 @@ Complete API coverage - full project management and error workflows.
 - `track/errors-update-status.php` - update error group status individually or in bulk
 - `error_groups.status` ENUM expanded - added `investigating` between `open` and `resolved`
 
+### v2.0.0
+Infrastructure release — async writes, cached reads. Requires Valkey + Supervisor on a VPS.
+- All tracking endpoints (`pageview`, `error`, `audit`) now push to a Valkey queue and return `202` immediately
+- Three background workers process DB writes off the HTTP request cycle
+- All 14 analytics endpoints use cache-aside with 2–5 minute TTL
+- Targeted cache invalidation on project delete/toggle, link edits, and error status changes
+- `error.php` and `audit.php` now accept either secret key (backend) or public key (JS snippet)
+- Supervisor config included at `supervisor/micrologs-workers.conf`
+- Tracking response time: ~2–5ms. Analytics on cache hit: ~2–5ms.
+
 ### @micrologs/node v1.0.1
 Official Node.js SDK - zero dependencies, Node 18+, CJS + ESM, silent on failure.
 - Wraps every engine endpoint: tracking, link management, analytics
@@ -65,27 +75,17 @@ Official Laravel SDK - service provider, facade, auto-discovery, TrackErrors mid
 
 ---
 
-## Active (v1.3.x)
+## Active (v2.x)
 
-Patch releases for security fixes and minor optimizations only. No new features in v1.3.x.
+Patch releases and minor improvements on the v2 foundation.
 
 - [ ] APCu rate limiter - drop-in replacement for the file-based rate limiter on hosts that support APCu. Atomic, zero filesystem I/O, no race condition.
+- [ ] `verifyPublicKey` Valkey cache - cache the key→project lookup with 60s TTL, eliminating one DB query on every single tracking request.
+- [ ] Health endpoint extended with queue depth and worker status.
 
 ---
 
 ## Planned
-
-### v2.0.0 - Infrastructure
-Target: VPS, ~100k pageviews/day ceiling.
-
-- [ ] Valkey/Redis as caching and queue transport
-- [ ] Async ingestion queue via Symfony Messenger - HTTP endpoints dispatch a message and return immediately, workers process DB writes in background
-- [ ] Webhook alerts - configurable triggers (new error group, error threshold, etc.)
-- [ ] Worker process management and monitoring
-- [ ] Health endpoint extended with queue depth and worker status
-
-### v2.x - Plugins
-- [ ] WordPress plugin - one-click install for WP sites
 
 ### v3.0.0 - Realtime
 Target: VPS, persistent connections.
@@ -93,6 +93,10 @@ Target: VPS, persistent connections.
 - [ ] WebSockets - live visitor count, live error feed
 - [ ] Live dashboard data feed
 - [ ] Real-time error alerting
+
+### v2.x - Plugins
+- [ ] WordPress plugin - one-click install for WP sites
+- [ ] Webhook alerts - configurable triggers (new error group, error threshold, etc.)
 
 ---
 

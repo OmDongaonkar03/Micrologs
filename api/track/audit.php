@@ -4,7 +4,10 @@
         Micrologs
         Endpoint : POST /api/track/audit.php
         Auth     : Public key (X-API-Key header)
-        Desc     : Ingest audit events from any application
+        Desc     : Ingest audit events from any application.
+                   Validates, enriches with IP hash, pushes to
+                   queue and returns 202 immediately.
+                   DB write handled by audit-worker.php
     ===============================================================
 */
 
@@ -16,7 +19,15 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
 rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_audit", 60, 60);
 
-$project = verifyPublicKey($conn);
+// Accept secret key (backend callers) or public key (JS snippet)
+// Secret key tried first — if it matches, domain lock is skipped (server-side call)
+// Public key fallback — domain lock enforced (browser call)
+$project = tryVerifySecretKey($conn) ?? tryVerifyPublicKey($conn);
+
+if (!$project) {
+    sendResponse(false, "Invalid API key", null, 401);
+}
+
 $projectId = (int) $project["id"];
 
 $input = readJsonBody();
@@ -25,7 +36,6 @@ if (!$input) {
     sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
-// Inputs
 $action = substr(trim($input["action"] ?? ""), 0, 100);
 $actor = substr(trim($input["actor"] ?? ""), 0, 255);
 $context = encodeContext($input["context"] ?? null);
@@ -34,34 +44,17 @@ if (empty($action)) {
     sendResponse(false, "action is required", null, 400);
 }
 
-// Hash IP
-$ip = getClientIp();
-$ipHash = hashIp($ip);
+// Capture IP hash at request time — not in the worker
+$payload = [
+    "project_id" => $projectId,
+    "action" => $action,
+    "actor" => $actor,
+    "ip_hash" => hashIp(getClientIp()),
+    "context" => $context,
+    "received_at" => date("Y-m-d H:i:s"),
+];
 
-// Insert audit log
-$stmt = $conn->prepare("
-    INSERT INTO audit_logs (project_id, action, actor, ip_hash, context)
-    VALUES (?, ?, ?, ?, ?)
-");
-if (!$stmt) {
-    writeLog("ERROR", "audit_logs INSERT prepare failed", [
-        "error" => $conn->error,
-    ]);
-    sendResponse(false, "Failed to record audit log", null, 500);
-}
-$stmt->bind_param("issss", $projectId, $action, $actor, $ipHash, $context);
+queuePush("micrologs:audits", $payload);
 
-if (!$stmt->execute()) {
-    writeLog("ERROR", "audit_logs INSERT execute failed", [
-        "error" => $stmt->error,
-        "project_id" => $projectId,
-        "action" => $action,
-    ]);
-    sendResponse(false, "Failed to record audit log", null, 500);
-}
-
-$id = (int) $conn->insert_id;
-$stmt->close();
-
-sendResponse(true, "OK", ["id" => $id]);
+sendResponse(true, "OK", ["queued" => true], 202);
 ?>

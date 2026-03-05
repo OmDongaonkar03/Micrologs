@@ -22,6 +22,17 @@ $projectId = (int) $project["id"];
 $range = parseDateRange();
 $groupId = isset($_GET["group_id"]) ? (int) $_GET["group_id"] : null;
 
+// ── Cache lookup ─────────────────────────────────────────────────
+// group_id scopes the trend to a single error group.
+// Include it in the key so all-groups and per-group are separate.
+$cacheKey =
+    "analytics:errors-trend:{$projectId}:{$range["from"]}:{$range["to"]}:" .
+    ($groupId ?? "all");
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Error trend fetched successfully", $cached);
+}
+
 // Summary — total errors in range, unique groups affected
 $stmt = $conn->prepare(
     "
@@ -154,12 +165,14 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Error trend fetched successfully", [
+$data = [
     "range" => $range,
     "group_id" => $groupId,
     "total_occurrences" => (int) ($summary["total_occurrences"] ?? 0),
     "total_groups" => (int) ($summary["total_groups"] ?? 0),
     "top_groups" => $topGroups,
     "over_time" => $overTime,
-]);
+];
+cacheSet($cacheKey, $data, 120);
+sendResponse(true, "Error trend fetched successfully", $data);
 ?>

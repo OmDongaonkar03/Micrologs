@@ -20,6 +20,13 @@ $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:locations:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Locations fetched successfully", $cached);
+}
+
 // By country
 $stmt = $conn->prepare("
     SELECT l.country, l.country_code,
@@ -97,9 +104,12 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Locations fetched successfully", [
+$data = [
     "range" => $range,
     "by_country" => $byCountry,
     "by_region" => $byRegion,
     "by_city" => $byCity,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Locations fetched successfully", $data);
+?>

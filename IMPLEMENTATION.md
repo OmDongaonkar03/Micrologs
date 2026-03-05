@@ -8,11 +8,17 @@ Micrologs is a lightweight, self-hosted analytics engine. It tracks pageviews, v
 
 ## Requirements
 
+**v1 (shared hosting)**
 - PHP 8.1+
 - MySQL 5.7+ or MariaDB 10.4+
 - Apache with `.htaccess` support (mod_rewrite enabled)
 - Composer
 - MaxMind GeoLite2 account (free)
+
+**v2 additions (VPS only)**
+- Valkey 7+ or Redis 6+
+- Supervisor
+- `predis/predis` PHP package
 
 ---
 
@@ -29,6 +35,12 @@ cd Micrologs
 
 ```bash
 composer install
+```
+
+For v2, also install the Valkey client:
+
+```bash
+composer require predis/predis
 ```
 
 ---
@@ -83,6 +95,11 @@ define("ALLOWED_ORIGINS", "https://yourdomain.com,http://localhost:8080");
 # which prevents IP spoofing of the rate limiter and GeoIP.
 # Example for local proxy: define("TRUSTED_PROXIES", "127.0.0.1");
 define("TRUSTED_PROXIES", "");
+
+# v2 — Valkey/Redis connection (required only if running workers)
+define("VALKEY_HOST",     "127.0.0.1");
+define("VALKEY_PORT",     6379);
+define("VALKEY_PASSWORD", "");
 ```
 
 > **Generate secure keys** — run this twice in PHP (once per key):
@@ -143,7 +160,92 @@ chmod 755 utils/rate_limits utils/rate_blocks
 
 ---
 
-## 7. Create Your First Project
+## 7. Set Up Valkey (v2 — VPS only)
+
+Skip this step if you're on shared hosting. v1 works without Valkey.
+
+Valkey is an open-source Redis-compatible key-value store used for the async queue and analytics cache. It is protocol-identical to Redis — if you already have Redis, it works as a drop-in.
+
+**Install Valkey:**
+
+```bash
+sudo apt install valkey
+sudo systemctl enable valkey
+sudo systemctl start valkey
+valkey-cli ping   # should return PONG
+```
+
+**Set a password** (recommended) in `/etc/valkey/valkey.conf`:
+
+```
+requirepass your_valkey_password
+```
+
+Then update `VALKEY_PASSWORD` in `authorization/env.php` to match.
+
+**Local development — run Valkey in Docker:**
+
+```bash
+docker run -d --name valkey -p 6379:6379 valkey/valkey:latest
+docker exec -it valkey valkey-cli ping
+```
+
+---
+
+## 8. Start Workers (v2 — VPS only)
+
+Workers are long-lived PHP processes that pop jobs off the Valkey queue and write them to the database. Each worker runs in an infinite loop — Supervisor keeps them alive and restarts them if they crash.
+
+**Install Supervisor:**
+
+```bash
+sudo apt install supervisor
+```
+
+**Copy the config:**
+
+```bash
+sudo cp supervisor/micrologs-workers.conf /etc/supervisor/conf.d/micrologs-workers.conf
+```
+
+Edit the file and update the path if your install is not at `/var/www/micrologs`:
+
+```ini
+command=php /var/www/micrologs/workers/pageview-worker.php
+directory=/var/www/micrologs
+```
+
+**Start workers:**
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start micrologs-worker:*
+sudo supervisorctl status
+```
+
+You should see three programs running — `micrologs-pageview`, `micrologs-error`, `micrologs-audit` — each with 2–3 processes.
+
+**Useful commands:**
+
+```bash
+sudo supervisorctl status                     # check all workers
+sudo supervisorctl restart micrologs-pageview:*  # restart pageview workers
+sudo supervisorctl tail -f micrologs-pageview_00 stdout  # tail worker log
+```
+
+**Test locally without Supervisor:**
+
+```bash
+# Open three terminals, run one per worker
+php workers/pageview-worker.php
+php workers/error-worker.php
+php workers/audit-worker.php
+```
+
+---
+
+## 9. Create Your First Project
 
 **The easiest way — open `setup.php` in your browser:**
 
@@ -256,7 +358,7 @@ The `confirm` value must exactly match the project's name. This is irreversible.
 
 ---
 
-## 8. Add the Tracking Snippet
+## 10. Add the Tracking Snippet
 
 Add this to every page you want to track, before `</body>`:
 
@@ -300,7 +402,7 @@ For Next.js - add in `layout.tsx` using `next/script`:
 
 ---
 
-## 9. Error Tracking
+## 11. Error Tracking
 
 Errors are auto-caught from the snippet - no extra setup needed. The snippet listens to `window.onerror` and `unhandledrejection` automatically.
 
@@ -310,12 +412,12 @@ Errors are auto-caught from the snippet - no extra setup needed. The snippet lis
 Micrologs.error("Payment failed", { order_id: 123, amount: 2999 }, "critical");
 ```
 
-**Manual error - from any backend (one HTTP call):**
+**Manual error - from any backend using the secret key:**
 
 ```bash
 curl -X POST https://yourdomain.com/api/track/error.php \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_public_key" \
+  -H "X-API-Key: your_secret_key" \
   -d '{
     "message": "Undefined variable $user",
     "error_type": "PHP Warning",
@@ -328,11 +430,13 @@ curl -X POST https://yourdomain.com/api/track/error.php \
   }'
 ```
 
-Works with any backend - PHP, Node, Python, Laravel, Django, anything that can make an HTTP request.
+Works with any backend — PHP, Node, Python, Laravel, Django, anything that can make an HTTP request.
+
+> The `error` endpoint accepts either `secret_key` (backend callers) or `public_key` (JS snippet). Use the secret key from backend code.
 
 ---
 
-## 10. Audit Logging
+## 12. Audit Logging
 
 Track any action from any application.
 
@@ -342,12 +446,12 @@ Track any action from any application.
 Micrologs.audit("user.login", "user@email.com", { role: "admin" });
 ```
 
-**From any backend:**
+**From any backend using the secret key:**
 
 ```bash
 curl -X POST https://yourdomain.com/api/track/audit.php \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_public_key" \
+  -H "X-API-Key: your_secret_key" \
   -d '{
     "action": "order.placed",
     "actor": "user@email.com",
@@ -355,9 +459,11 @@ curl -X POST https://yourdomain.com/api/track/audit.php \
   }'
 ```
 
+> The `audit` endpoint accepts either `secret_key` (backend callers) or `public_key` (JS snippet). Use the secret key from backend code.
+
 ---
 
-## 11. API Reference
+## 13. API Reference
 
 All analytics endpoints use the `secret_key` via the `X-API-Key` header.
 
@@ -552,11 +658,11 @@ Returns `200` when healthy, `503` when any critical check fails. `warn` status d
 
 ---
 
-## 12. Key Concepts
+## 14. Key Concepts
 
 **Public Key** - used in the JS snippet, safe to expose in the browser. Locked to your `allowed_domains` list.
 
-**Secret Key** - used server-side only for analytics and link management. Never expose in frontend code.
+**Secret Key** - used server-side only for analytics and link management. Also accepted by `error` and `audit` endpoints from backend callers. Never expose in frontend code.
 
 **Allowed Domains** - one or more domains that are permitted to send data using the public key. Requests from unlisted domains are rejected. Supports subdomains automatically.
 
@@ -570,6 +676,10 @@ Returns `200` when healthy, `503` when any critical check fails. `warn` status d
 
 **Deduplication** - the same visitor hitting the same URL within 5 minutes is counted only once.
 
+**Async Queue (v2)** - tracking endpoints push events to a Valkey list and return `202` immediately. Background workers pop from the queue and write to the database. The browser never waits for a DB write.
+
+**Analytics Cache (v2)** - analytics responses are cached in Valkey for 2–5 minutes. A dashboard refreshing every 30 seconds hits the DB once per 5 minutes instead of once per 30 seconds.
+
 ---
 
 ## Security Notes
@@ -580,3 +690,4 @@ Returns `200` when healthy, `503` when any critical check fails. `warn` status d
 - IPs are never stored raw - they are hashed with your `IP_HASH_SALT` immediately on ingestion
 - On shared hosting, leave `TRUSTED_PROXIES` empty - `X-Forwarded-For` will be completely ignored, preventing IP spoofing of the rate limiter and GeoIP lookup
 - On a VPS with Nginx in front of PHP-FPM, set `TRUSTED_PROXIES` to `127.0.0.1` so real client IPs are correctly read through the proxy
+- Set a password on your Valkey instance (`requirepass` in `valkey.conf`) and keep port 6379 firewalled — it should never be publicly accessible

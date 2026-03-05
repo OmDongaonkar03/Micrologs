@@ -20,6 +20,13 @@ $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:returning:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Visitor retention fetched successfully", $cached);
+}
+
 // New visitor = first_seen falls within the date range
 // Returning  = first_seen is before the range start but they have
 //              a pageview within the range
@@ -108,7 +115,7 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Visitor retention fetched successfully", [
+$data = [
     "range" => $range,
     "total_visitors" => $totalVisitors,
     "new_visitors" => $newVisitors,
@@ -116,5 +123,7 @@ sendResponse(true, "Visitor retention fetched successfully", [
     "new_pct" => $newPct,
     "returning_pct" => $returningPct,
     "over_time" => $overTime,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Visitor retention fetched successfully", $data);
 ?>

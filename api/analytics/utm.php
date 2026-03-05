@@ -20,6 +20,13 @@ $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:utm:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "UTM data fetched successfully", $cached);
+}
+
 $stmt = $conn->prepare("
     SELECT utm_source, utm_medium, utm_campaign,
            COUNT(*) AS pageviews,
@@ -46,8 +53,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "UTM data fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($campaigns),
     "campaigns" => $campaigns,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "UTM data fetched successfully", $data);
+?>

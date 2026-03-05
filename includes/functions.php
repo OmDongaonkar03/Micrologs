@@ -13,25 +13,30 @@ require_once __DIR__ . "/../utils/rate-limit.php"; // For rate limiting function
 // Unique ID for HTTP requests
 $GLOBALS["request_id"] = substr(bin2hex(random_bytes(4)), 0, 8);
 
-$origin = $_SERVER["HTTP_ORIGIN"] ?? "";
+// CORS headers are only relevant for HTTP requests, not CLI workers
+if (!defined("RUNNING_AS_WORKER")) {
+    $origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 
-$allowedOrigins =
-    defined("ALLOWED_ORIGINS") && ALLOWED_ORIGINS !== ""
-        ? array_map("trim", explode(",", ALLOWED_ORIGINS))
-        : [];
+    $allowedOrigins =
+        defined("ALLOWED_ORIGINS") && ALLOWED_ORIGINS !== ""
+            ? array_map("trim", explode(",", ALLOWED_ORIGINS))
+            : [];
 
-if (in_array($origin, $allowedOrigins)) {
-    header("Access-Control-Allow-Origin: $origin");
-}
+    if (in_array($origin, $allowedOrigins)) {
+        header("Access-Control-Allow-Origin: $origin");
+    }
 
-header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, X-API-Key");
-header("Access-Control-Max-Age: 86400");
+    header(
+        "Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    );
+    header("Access-Control-Allow-Headers: Content-Type, X-API-Key");
+    header("Access-Control-Max-Age: 86400");
 
-// Handle preflight request
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
+    // Handle preflight request
+    if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
+        http_response_code(200);
+        exit();
+    }
 }
 
 // LOGGING
@@ -82,6 +87,142 @@ function writeLog($level, $message, $context = [])
         PHP_EOL;
 
     file_put_contents($logPath, $line, FILE_APPEND | LOCK_EX);
+}
+
+// VALKEY
+
+function getValkey(): \Predis\Client
+{
+    static $client = null;
+
+    if ($client === null) {
+        $client = new \Predis\Client([
+            "scheme" => "tcp",
+            "host" => defined("VALKEY_HOST") ? VALKEY_HOST : "127.0.0.1",
+            "port" => defined("VALKEY_PORT") ? VALKEY_PORT : 6379,
+            "password" => defined("VALKEY_PASSWORD") ? VALKEY_PASSWORD : "",
+        ]);
+    }
+
+    return $client;
+}
+
+function queuePush(string $queue, array $payload): void
+{
+    try {
+        $valkey = getValkey();
+        $valkey->rpush($queue, [json_encode($payload)]);
+    } catch (\Exception $e) {
+        // If Valkey is down, log it but don't break the request
+        writeLog("error", "queuePush failed: " . $e->getMessage(), [
+            "queue" => $queue,
+        ]);
+    }
+}
+
+function queuePop(string $queue): ?array
+{
+    try {
+        $valkey = getValkey();
+        // BLPOP blocks for up to 2 seconds waiting for a message
+        // Returns null if nothing arrives in that time
+        $result = $valkey->blpop([$queue], 2);
+        if ($result && isset($result[1])) {
+            return json_decode($result[1], true);
+        }
+    } catch (\Exception $e) {
+        writeLog("error", "queuePop failed: " . $e->getMessage(), [
+            "queue" => $queue,
+        ]);
+    }
+
+    return null;
+}
+
+/**
+ * Read a cached value from Valkey.
+ * Returns the decoded value, or null on miss or error.
+ */
+function cacheGet(string $key): mixed
+{
+    try {
+        $value = getValkey()->get($key);
+        return $value !== null ? json_decode($value, true) : null;
+    } catch (\Exception $e) {
+        writeLog("error", "cacheGet failed: " . $e->getMessage(), [
+            "key" => $key,
+        ]);
+        return null;
+    }
+}
+
+/**
+ * Store a value in Valkey with a TTL in seconds.
+ * Silently skips if Valkey is unavailable — cache is optional, never blocking.
+ */
+function cacheSet(string $key, mixed $value, int $ttl = 300): void
+{
+    try {
+        getValkey()->setex($key, $ttl, json_encode($value));
+    } catch (\Exception $e) {
+        writeLog("error", "cacheSet failed: " . $e->getMessage(), [
+            "key" => $key,
+        ]);
+    }
+}
+
+/**
+ * Delete one or more cache keys.
+ * Used when a project is toggled or deleted to invalidate stale data.
+ */
+function cacheDel(string ...$keys): void
+{
+    try {
+        getValkey()->del($keys);
+    } catch (\Exception $e) {
+        writeLog("error", "cacheDel failed: " . $e->getMessage(), [
+            "keys" => $keys,
+        ]);
+    }
+}
+
+/**
+ * Bust all analytics cache keys for a given project.
+ *
+ * Uses Valkey KEYS to find every key matching "analytics:*:{id}:*"
+ * then deletes them all in one DEL call.
+ *
+ * When to call this:
+ *   - projects/delete.php   — project is gone, all its cached data is stale
+ *   - projects/toggle.php   — project disabled/enabled changes what queries return
+ *
+ * NOTE: KEYS is O(N) over the entire keyspace and blocks Valkey while it runs.
+ * On a small install (thousands of keys, not millions) this is fine.
+ * If you ever have millions of keys, replace this with SCAN-based iteration.
+ */
+function cacheBustProject(int $projectId): void
+{
+    try {
+        $valkey = getValkey();
+
+        // Find all keys for this project across all endpoints and ranges
+        // Pattern: analytics:{endpoint}:{projectId}:{anything}
+        $pattern = "analytics:*:{$projectId}:*";
+        $keys = $valkey->keys($pattern);
+
+        if (!empty($keys)) {
+            $valkey->del($keys);
+            writeLog("info", "cache busted for project", [
+                "project_id" => $projectId,
+                "keys_deleted" => count($keys),
+            ]);
+        }
+    } catch (\Exception $e) {
+        // Cache bust failing is not fatal — stale data expires naturally via TTL
+        writeLog("error", "cacheBustProject failed: " . $e->getMessage(), [
+            "project_id" => $projectId,
+        ]);
+    }
 }
 
 // RESPONSE
@@ -234,6 +375,91 @@ function verifySecretKey($conn)
 
     if (!$project) {
         sendResponse(false, "Invalid API key", null, 401);
+    }
+
+    return $project;
+}
+
+/**
+ * Soft version of verifySecretKey.
+ * Returns the project array on success, null on any failure.
+ * Does NOT call sendResponse/exit — lets the caller decide what to do next.
+ * Used by endpoints that accept either secret key OR public key (error, audit).
+ */
+function tryVerifySecretKey($conn): ?array
+{
+    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
+
+    if (empty($key)) {
+        return null;
+    }
+
+    $stmt = $conn->prepare(
+        "SELECT id, name, allowed_domains FROM projects WHERE secret_key = ? AND is_active = 1 LIMIT 1"
+    );
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param("s", $key);
+    $stmt->execute();
+    $project = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return $project ?: null;
+}
+
+/**
+ * Soft version of verifyPublicKey.
+ * Returns the project array on success, null on any failure.
+ * Includes domain lock check — same as the hard version.
+ * Used by endpoints that accept either secret key OR public key (error, audit).
+ */
+function tryVerifyPublicKey($conn): ?array
+{
+    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
+
+    if (empty($key)) {
+        return null;
+    }
+
+    $stmt = $conn->prepare(
+        "SELECT id, name, allowed_domains FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
+    );
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param("s", $key);
+    $stmt->execute();
+    $project = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$project) {
+        return null;
+    }
+
+    // Domain lock — only enforced for public key (browser requests)
+    $origin = $_SERVER["HTTP_ORIGIN"] ?? ($_SERVER["HTTP_REFERER"] ?? "");
+    if (!empty($origin)) {
+        $host = preg_replace(
+            "/^www\./",
+            "",
+            strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
+        );
+
+        $allowed = false;
+        $domains = explode(",", $project["allowed_domains"]);
+
+        foreach ($domains as $domain) {
+            $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
+            if ($host === $domain || str_ends_with($host, "." . $domain)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
+            return null;
+        }
     }
 
     return $project;

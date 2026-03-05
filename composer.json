@@ -1,6 +1,8 @@
 {
   "require": {
-    "maxmind-db/reader": "^1.13"
+    "maxmind-db/reader": "^1.13",
+    "predis/predis": "^3.4",
+    "symfony/messenger": "^7.4"
   },
   "config": {
     "vendor-dir": "utils/vendor"
