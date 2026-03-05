@@ -646,15 +646,26 @@ curl https://yourdomain.com/api/health.php
   "status": "healthy",
   "timestamp": "2026-02-25 14:30:00",
   "checks": {
-    "php":         { "status": "ok",   "version": "8.2.12", "message": "PHP 8.2.12" },
-    "database":    { "status": "ok",   "message": "Connected" },
-    "geoip":       { "status": "warn", "message": "GeoLite2-City.mmdb not found - location tracking disabled" },
-    "rate_limiter":{ "status": "ok",   "message": "rate_limits and rate_blocks directories are writable" }
+    "php":      { "status": "ok", "version": "8.2.12", "message": "PHP 8.2.12" },
+    "database": { "status": "ok", "message": "Connected" },
+    "valkey":   { "status": "ok", "message": "Connected" },
+    "workers":  {
+      "status": "ok",
+      "message": "All workers running",
+      "workers": {
+        "pageview-worker": "ok",
+        "error-worker":    "ok",
+        "audit-worker":    "ok"
+      }
+    },
+    "geoip":    { "status": "warn", "message": "GeoLite2-City.mmdb not found - location tracking disabled" }
   }
 }
 ```
 
 Returns `200` when healthy, `503` when any critical check fails. `warn` status does not affect overall health.
+
+> `valkey` and `workers` checks only appear when `IS_PRODUCTION` is set to `true` in `env.php`. On local or shared hosting these checks are skipped.
 
 ---
 
