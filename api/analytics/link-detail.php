@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_link_detail", 60, 60);
+rateLimitOrBlock(getClientIp() . "_link_detail", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
@@ -37,6 +37,14 @@ $stmt->close();
 
 if (!$link) {
     sendResponse(false, "Link not found", null, 404);
+}
+
+// ── Cache lookup ─────────────────────────────────────────────────
+// Keyed by link code + range. Busted in links/edit.php when the link changes.
+$cacheKey = "analytics:link-detail:{$projectId}:{$code}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Link detail fetched successfully", $cached);
 }
 
 $linkId = (int) $link["id"];
@@ -132,7 +140,7 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Link detail fetched successfully", [
+$data = [
     "range" => $range,
     "link" => $link,
     "total_clicks" => (int) ($totals["total_clicks"] ?? 0),
@@ -141,4 +149,7 @@ sendResponse(true, "Link detail fetched successfully", [
     "by_referrer" => $byReferrer,
     "by_device" => $byDevice,
     "over_time" => $overTime,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Link detail fetched successfully", $data);
+?>

@@ -16,7 +16,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_errors_update_status", 30, 60);
+rateLimitOrBlock(getClientIp() . "_errors_update_status", 30, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
@@ -131,6 +131,47 @@ $response = [
 
 if (!empty($invalidIds)) {
     $response["not_found"] = $invalidIds;
+}
+
+// ── Cache invalidation ────────────────────────────────────────────
+// Three caches are now stale after a status change:
+//
+// 1. error-detail for each updated group — status field changed
+// 2. errors list — summary counts (open/investigating/resolved/ignored) changed
+// 3. errors-trend — top_groups includes status, so those entries are stale
+//
+// We bust by pattern so all range variants are cleared in one pass.
+try {
+    $valkey = getValkey();
+    $allKeys = [];
+
+    // Bust detail cache for each updated group
+    foreach ($validIds as $id) {
+        $keys = $valkey->keys("analytics:error-detail:{$projectId}:{$id}:*");
+        if (!empty($keys)) {
+            $allKeys = array_merge($allKeys, $keys);
+        }
+    }
+
+    // Bust errors list cache (all filter variants for this project)
+    $listKeys = $valkey->keys("analytics:errors:{$projectId}:*");
+    $trendKeys = $valkey->keys("analytics:errors-trend:{$projectId}:*");
+
+    $allKeys = array_merge($allKeys, $listKeys, $trendKeys);
+
+    if (!empty($allKeys)) {
+        $valkey->del($allKeys);
+        writeLog("info", "error status cache busted", [
+            "project_id" => $projectId,
+            "ids" => $validIds,
+            "keys_deleted" => count($allKeys),
+        ]);
+    }
+} catch (\Exception $e) {
+    // Non-fatal — stale error cache expires naturally via TTL
+    writeLog("error", "error status cache bust failed: " . $e->getMessage(), [
+        "project_id" => $projectId,
+    ]);
 }
 
 $message =

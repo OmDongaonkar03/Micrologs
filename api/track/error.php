@@ -4,7 +4,10 @@
         Micrologs
         Endpoint : POST /api/track/error.php
         Auth     : Public key (X-API-Key header)
-        Desc     : Ingest errors from JS snippet or any backend
+        Desc     : Ingest errors from JS snippet or any backend.
+                   Validates, enriches with server-side data,
+                   pushes to queue and returns 202 immediately.
+                   DB write handled by error-worker.php
     ===============================================================
 */
 
@@ -14,9 +17,17 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_errors", 60, 60);
+rateLimitOrBlock(getClientIp() . "_errors", 60, 60);
 
-$project = verifyPublicKey($conn);
+// Accept secret key (backend callers) or public key (JS snippet)
+// Secret key tried first — if it matches, domain lock is skipped (server-side call)
+// Public key fallback — domain lock enforced (browser call)
+$project = tryVerifySecretKey($conn) ?? tryVerifyPublicKey($conn);
+
+if (!$project) {
+    sendResponse(false, "Invalid API key", null, 401);
+}
+
 $projectId = (int) $project["id"];
 
 $input = readJsonBody();
@@ -25,7 +36,6 @@ if (!$input) {
     sendResponse(false, "Invalid or missing JSON body", null, 400);
 }
 
-// Inputs
 $message = substr(trim($input["message"] ?? ""), 0, 1024);
 $errorType = substr(trim($input["error_type"] ?? "Unknown"), 0, 100);
 $file = substr(trim($input["file"] ?? ""), 0, 512);
@@ -55,130 +65,33 @@ if (empty($message)) {
     sendResponse(false, "message is required", null, 400);
 }
 
-// Fingerprint - group same errors together
+// Fingerprint computed here — needs project_id + error fields, all available now
 $fingerprint = hash(
     "sha256",
     $projectId . $errorType . $message . $file . ($line ?? "")
 );
 
-// Geolocation + Device
+// Server-side enrichment captured at request time
 $ip = getClientIp();
-$geo = geolocate($ip);
-$ua = $_SERVER["HTTP_USER_AGENT"] ?? "";
-$device = parseUserAgent($ua);
-$locationId = resolveLocation($conn, $projectId, $geo);
-$deviceId = resolveDevice($conn, $projectId, $device);
 
-// Upsert error group
-$now = date("Y-m-d H:i:s");
+$payload = [
+    "project_id" => $projectId,
+    "fingerprint" => $fingerprint,
+    "error_type" => $errorType,
+    "message" => $message,
+    "file" => $file,
+    "line" => $line,
+    "stack_trace" => $stackTrace,
+    "url" => $url,
+    "severity" => $severity,
+    "environment" => $environment,
+    "context" => $context,
+    "geo" => geolocate($ip),
+    "device" => parseUserAgent($_SERVER["HTTP_USER_AGENT"] ?? ""),
+    "received_at" => date("Y-m-d H:i:s"),
+];
 
-$stmt = $conn->prepare(
-    "SELECT id FROM error_groups WHERE project_id = ? AND fingerprint = ? LIMIT 1"
-);
-if (!$stmt) {
-    writeLog("ERROR", "error_groups SELECT prepare failed", [
-        "error" => $conn->error,
-    ]);
-    sendResponse(false, "Server error", null, 500);
-}
-$stmt->bind_param("is", $projectId, $fingerprint);
-$stmt->execute();
-$group = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+queuePush("micrologs:errors", $payload);
 
-if ($group) {
-    // Existing group - increment count and update last_seen
-    $groupId = (int) $group["id"];
-    $stmt = $conn->prepare("
-        UPDATE error_groups
-        SET occurrence_count = occurrence_count + 1,
-            last_seen = ?,
-            severity = ?,
-            status = IF(status = 'resolved', 'open', status)
-        WHERE id = ?
-    ");
-    if (!$stmt) {
-        writeLog("ERROR", "error_groups UPDATE prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("ssi", $now, $severity, $groupId);
-    if (!$stmt->execute()) {
-        writeLog("ERROR", "error_groups UPDATE execute failed", [
-            "error" => $stmt->error,
-        ]);
-    }
-    $stmt->close();
-} else {
-    // New error group
-    $stmt = $conn->prepare("
-        INSERT INTO error_groups
-            (project_id, fingerprint, error_type, message, file, line, severity, environment, first_seen, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    if (!$stmt) {
-        writeLog("ERROR", "error_groups INSERT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param(
-        "issssissss",
-        $projectId,
-        $fingerprint,
-        $errorType,
-        $message,
-        $file,
-        $line,
-        $severity,
-        $environment,
-        $now,
-        $now
-    );
-    if (!$stmt->execute()) {
-        writeLog("ERROR", "error_groups INSERT execute failed", [
-            "error" => $stmt->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $groupId = (int) $conn->insert_id;
-    $stmt->close();
-}
-
-// Insert error event
-$stmt = $conn->prepare("
-    INSERT INTO error_events
-        (group_id, project_id, location_id, device_id, stack_trace, url, environment, severity, context)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-");
-if (!$stmt) {
-    writeLog("ERROR", "error_events INSERT prepare failed", [
-        "error" => $conn->error,
-    ]);
-    sendResponse(false, "Failed to record error", null, 500);
-}
-$stmt->bind_param(
-    "iiisssss",
-    $groupId,
-    $projectId,
-    $locationId,
-    $deviceId,
-    $stackTrace,
-    $url,
-    $environment,
-    $severity,
-    $context
-);
-
-if (!$stmt->execute()) {
-    writeLog("ERROR", "error_events INSERT execute failed", [
-        "error" => $stmt->error,
-        "project_id" => $projectId,
-    ]);
-    sendResponse(false, "Failed to record error", null, 500);
-}
-$stmt->close();
-
-sendResponse(true, "OK", ["group_id" => $groupId]);
+sendResponse(true, "OK", ["queued" => true], 202);
 ?>

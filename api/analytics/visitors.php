@@ -14,11 +14,23 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_visitors", 60, 60);
+rateLimitOrBlock(getClientIp() . "_visitors", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
+
+// ── Cache lookup ──────────────────────────────────────────────────
+// Key encodes project + date range so every combination is isolated.
+// TTL is 5 minutes — analytics aggregates don't need real-time accuracy.
+$cacheKey = "analytics:visitors:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+
+if ($cached !== null) {
+    // Cache hit — return immediately, none of the DB queries below run
+    sendResponse(true, "Visitor analytics fetched successfully", $cached);
+}
+// Cache miss — fall through to DB queries, result stored at the bottom
 
 // Unique visitors + total pageviews
 $stmt = $conn->prepare("
@@ -73,11 +85,17 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Visitor analytics fetched successfully", [
+$data = [
     "range" => $range,
     "unique_visitors" => (int) ($totals["unique_visitors"] ?? 0),
     "total_pageviews" => (int) ($totals["total_pageviews"] ?? 0),
     "total_sessions" => $totalSessions,
     "bounce_rate" => $bounceRate,
     "over_time" => $overTime,
-]);
+];
+
+// Store in Valkey — next request within 5 minutes skips all three DB queries
+cacheSet($cacheKey, $data, 300);
+
+sendResponse(true, "Visitor analytics fetched successfully", $data);
+?>

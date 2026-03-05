@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_list", 30, 60);
+rateLimitOrBlock(getClientIp() . "_project_list", 30, 60);
 
 $adminKey = $_SERVER["HTTP_X_ADMIN_KEY"] ?? "";
 if (empty($adminKey) || $adminKey !== ADMIN_KEY) {

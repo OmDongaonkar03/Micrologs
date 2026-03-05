@@ -14,11 +14,18 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_utm", 60, 60);
+rateLimitOrBlock(getClientIp() . "_utm", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
+
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:utm:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "UTM data fetched successfully", $cached);
+}
 
 $stmt = $conn->prepare("
     SELECT utm_source, utm_medium, utm_campaign,
@@ -46,8 +53,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "UTM data fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($campaigns),
     "campaigns" => $campaigns,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "UTM data fetched successfully", $data);
+?>

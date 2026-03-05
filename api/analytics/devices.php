@@ -14,11 +14,18 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_devices", 60, 60);
+rateLimitOrBlock(getClientIp() . "_devices", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
+
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:devices:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Devices fetched successfully", $cached);
+}
 
 // By device type
 $stmt = $conn->prepare("
@@ -83,9 +90,12 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Devices fetched successfully", [
+$data = [
     "range" => $range,
     "by_device" => $byDevice,
     "by_os" => $byOs,
     "by_browser" => $byBrowser,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Devices fetched successfully", $data);
+?>

@@ -2,7 +2,7 @@
 
 A self-hostable analytics + error tracking engine. Drop one script tag, data hits your own database. No SaaS bill, no third-party dashboard, no black box.
 
-Works on the cheapest shared hosting you can find - handles up to **~10,000 pageviews/day** on a standard shared host with no Redis, no queue, and no VPS required. Built to grow - v2 adds caching and queuing, v3 adds websockets and webhooks. Each stage is opt-in, so shared hosting users are never broken by what VPS users unlock.
+Works on the cheapest shared hosting you can find - handles up to **~10,000 pageviews/day** on a standard shared host with no Redis, no queue, and no VPS required. On a VPS with v2, the ceiling jumps to **~500,000 pageviews/day** with async queuing and Valkey caching. Each stage is opt-in — shared hosting users are never broken by what VPS users unlock.
 
 **[→ Full setup guide](IMPLEMENTATION.md)**
 
@@ -92,6 +92,7 @@ curl https://yourdomain.com/api/analytics/visitors.php?range=30d \
 - **Database** - MySQL 8.0+ / MariaDB 10.4+
 - **Geolocation** - MaxMind GeoLite2 (local, no API calls at runtime)
 - **Snippet** - Vanilla JS, zero dependencies, ~3KB
+- **v2 (VPS only)** - Valkey 7+ (or Redis 6+), Supervisor
 
 ---
 
@@ -109,7 +110,8 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Engine | Node SDK | Python SDK | Laravel SDK |
 |---|---|---|---|
-| v1.3.0 *(current)* | v1.0.0 | v1.0.0 | v1.0.0 |
+| v2.0.0 *(current)* | v1.0.0 | v1.0.0 | v1.0.0 |
+| v1.3.x | v1.0.0 | v1.0.0 | v1.0.0 |
 
 ---
 
@@ -121,7 +123,7 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 | v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
 | v1.2 - Analytics Depth | Shipped | Session analytics, new vs returning visitors, error trends over time |
 | v1.3 - Complete API | Shipped | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
-| v2 - Infrastructure | Planned | Valkey/Redis caching, async queue via Symfony Messenger, webhook alerts |
+| v2 - Infrastructure | Shipped | Async queue (Valkey), background workers, analytics caching, cache invalidation |
 | v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 
 ---

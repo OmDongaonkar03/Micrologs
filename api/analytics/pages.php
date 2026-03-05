@@ -14,12 +14,19 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_pages", 60, 60);
+rateLimitOrBlock(getClientIp() . "_pages", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
 $limit = min(100, max(1, (int) ($_GET["limit"] ?? 20)));
+
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:pages:{$projectId}:{$range["from"]}:{$range["to"]}:{$limit}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Pages fetched successfully", $cached);
+}
 
 $stmt = $conn->prepare("
     SELECT url, page_title,
@@ -46,8 +53,11 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Pages fetched successfully", [
+$data = [
     "range" => $range,
     "count" => count($pages),
     "pages" => $pages,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Pages fetched successfully", $data);
+?>

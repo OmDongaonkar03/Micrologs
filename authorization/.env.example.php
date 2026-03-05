@@ -4,6 +4,18 @@
     define("DB_PASS", "your_db_pass");
     define("DB_NAME", "your_db_name");
 
+    define("IS_PRODUCTION", false); // Set to true in production to enable worker health checks
+
+    define("VALKEY_HOST", "your_valkey_host");
+    define("VALKEY_PORT", your_valkey_port);
+    define("VALKEY_PASSWORD", "your_valkey_password");
+
+    // Tell includes that we are running from CLI, not a web request.
+    // functions.php checks this to skip CORS headers and OPTIONS handling
+    // which don't apply in a worker context.
+    // Keep false on web-facing APIs to allow CORS and preflight handling.
+    define("RUNNING_AS_WORKER", true);
+
     # Timezone
     define("APP_TIMEZONE", "+05:30");
     define("TIMEZONE", "Asia/Kolkata");

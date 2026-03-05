@@ -15,7 +15,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_links_edit", 30, 60);
+rateLimitOrBlock(getClientIp() . "_links_edit", 30, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
@@ -136,6 +136,23 @@ $stmt->bind_param("i", $link["id"]);
 $stmt->execute();
 $updated = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
+// ── Bust link-detail cache for this code ─────────────────────────
+// The link's destination, label, or active state just changed.
+// Any cached detail response is now wrong. We bust by code rather than
+// project-wide because only this link changed — other links are still valid.
+// We can't know which ranges are cached so we bust the known pattern.
+try {
+    $pattern = "analytics:link-detail:{$projectId}:{$code}:*";
+    $keys = getValkey()->keys($pattern);
+    if (!empty($keys)) {
+        cacheDel(...$keys);
+    }
+} catch (\Exception $e) {
+    writeLog("error", "link-detail cache bust failed: " . $e->getMessage(), [
+        "code" => $code,
+    ]);
+}
 
 sendResponse(true, "Link updated successfully", [
     "id" => (int) $updated["id"],

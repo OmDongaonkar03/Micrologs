@@ -14,11 +14,18 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_visitors_returning", 60, 60);
+rateLimitOrBlock(getClientIp() . "_visitors_returning", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
+
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:returning:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Visitor retention fetched successfully", $cached);
+}
 
 // New visitor = first_seen falls within the date range
 // Returning  = first_seen is before the range start but they have
@@ -108,7 +115,7 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-sendResponse(true, "Visitor retention fetched successfully", [
+$data = [
     "range" => $range,
     "total_visitors" => $totalVisitors,
     "new_visitors" => $newVisitors,
@@ -116,5 +123,7 @@ sendResponse(true, "Visitor retention fetched successfully", [
     "new_pct" => $newPct,
     "returning_pct" => $returningPct,
     "over_time" => $overTime,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Visitor retention fetched successfully", $data);
 ?>

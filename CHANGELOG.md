@@ -4,6 +4,67 @@ All notable changes to Micrologs will be documented here.
 
 ---
 
+## [2.0.0] - 2026-03-05
+
+Infrastructure release. All tracking writes are now async. All analytics reads are cached. Requires Valkey (or Redis) and Supervisor on the server. Shared hosting users on v1.3.x are unaffected — v2 is opt-in via a VPS deployment.
+
+### Added
+
+**Async ingestion queue**
+- `workers/pageview-worker.php` — processes pageview writes from the `micrologs:pageviews` queue
+- `workers/error-worker.php` — processes error writes from the `micrologs:errors` queue
+- `workers/audit-worker.php` — processes audit writes from the `micrologs:audits` queue
+- `supervisor/micrologs-workers.conf` — production Supervisor config, 3 workers for pageviews, 2 each for errors and audits
+
+**Valkey/Redis helpers in `includes/functions.php`**
+- `getValkey()` — singleton Valkey connection, reused per process
+- `queuePush(queue, payload)` — RPUSH to queue, silent on Valkey failure
+- `queuePop(queue)` — BLPOP with 2s timeout, no busy spin
+- `cacheGet(key)` — returns decoded value or null on miss/failure
+- `cacheSet(key, value, ttl)` — setex with TTL, silent on failure
+- `cacheDel(...keys)` — delete one or more keys
+- `cacheBustProject(projectId)` — pattern-delete all analytics keys for a project
+- `RUNNING_AS_WORKER` guard — skips CORS headers when included from CLI
+
+**Analytics caching**
+- All 14 analytics endpoints now use cache-aside pattern
+- 5-minute TTL on aggregate endpoints (`visitors`, `sessions`, `pages`, `devices`, `locations`, `referrers`, `utm`, `visitors-returning`, `links`, `link-detail`, `audits`)
+- 2-minute TTL on error endpoints (`errors`, `errors-trend`, `error-detail`) — fresher data when monitoring errors
+- Cache keys encode project ID + date range (+ active filters where applicable) so different queries never collide
+
+**Cache invalidation**
+- `projects/delete.php` — busts all analytics keys for the deleted project
+- `projects/toggle.php` — busts all analytics keys when a project is enabled or disabled
+- `links/edit.php` — busts `link-detail` keys for the edited link code
+- `track/errors-update-status.php` — busts errors list, errors-trend, and error-detail keys for updated groups
+- `workers/error-worker.php` — busts errors list and errors-trend keys on every error write
+
+**Auth improvement**
+- `tryVerifySecretKey($conn)` — soft auth helper, returns null instead of exit on failure
+- `tryVerifyPublicKey($conn)` — soft auth helper with domain lock, returns null instead of exit on failure
+- `api/track/error.php` and `api/track/audit.php` now accept either secret key (backend callers) or public key (JS snippet), tried in that order
+
+### Changed
+
+- `api/track/pageview.php` — removed all DB writes. Now validates, enriches (IP, GeoIP, device, UTM, `received_at`), pushes to `micrologs:pageviews` queue, returns `202 Accepted`
+- `api/track/error.php` — removed all DB writes. Now validates, enriches (fingerprint, GeoIP, device, `received_at`), pushes to `micrologs:errors` queue, returns `202 Accepted`
+- `api/track/audit.php` — removed DB write. Now validates, enriches (IP hash, `received_at`), pushes to `micrologs:audits` queue, returns `202 Accepted`
+
+### Requirements added
+
+- **Valkey 7+** (or Redis 6+) — queue and cache transport
+- **Supervisor** — worker process management
+- **`predis/predis`** — pure PHP Valkey/Redis client (`composer require predis/predis`)
+
+### Performance
+
+- Tracking endpoint response time: from ~50–200ms (sync DB writes) to ~2–5ms (queue push)
+- Analytics read response time: ~2–5ms on cache hit, unchanged on cache miss
+- DB write load: moved entirely off the HTTP request cycle into background workers
+- Analytics read load: reduced ~10x for dashboards that poll on a short interval
+
+---
+
 ## [1.3.1] - 2026-03-03
 
 ### Added
@@ -53,7 +114,6 @@ Three new analytics endpoints using existing data - no schema changes, no new tr
 - **`GET /api/analytics/errors-trend.php`** - daily error occurrences over time, top 5 error groups by occurrence, total unique groups affected. Accepts optional `?group_id=` to scope to a single error group.
 
 ---
-
 
 ## [1.1.0] - 2026-03-01
 

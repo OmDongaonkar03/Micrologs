@@ -13,7 +13,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_verify", 20, 60);
+rateLimitOrBlock(getClientIp() . "_project_verify", 20, 60);
 
 $input = readJsonBody();
 

@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_delete", 5, 60);
+rateLimitOrBlock(getClientIp() . "_project_delete", 5, 60);
 
 $adminKey = $_SERVER["HTTP_X_ADMIN_KEY"] ?? "";
 if (empty($adminKey) || $adminKey !== ADMIN_KEY) {
@@ -126,6 +126,10 @@ writeLog("INFO", "Project deleted", [
     "project_id" => $projectId,
     "project_name" => $project["name"],
 ]);
+
+// Bust all analytics cache for this project.
+// The project and its data are gone — any cached responses are now wrong.
+cacheBustProject($projectId);
 
 sendResponse(
     true,

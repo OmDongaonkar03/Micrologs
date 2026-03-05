@@ -10,7 +10,7 @@
 
 include_once __DIR__ . "/../includes/functions.php";
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_redirect", 120, 60);
+rateLimitOrBlock(getClientIp() . "_redirect", 120, 60);
 
 $code = trim($_GET["c"] ?? "");
 

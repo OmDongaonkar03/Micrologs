@@ -16,7 +16,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_project_toggle", 10, 60);
+rateLimitOrBlock(getClientIp() . "_project_toggle", 10, 60);
 
 $adminKey = $_SERVER["HTTP_X_ADMIN_KEY"] ?? "";
 if (empty($adminKey) || $adminKey !== ADMIN_KEY) {
@@ -92,6 +92,11 @@ writeLog("INFO", "Project {$stateLabel}", [
     "project_name" => $project["name"],
     "is_active" => (bool) $newState,
 ]);
+
+// Bust all analytics cache for this project.
+// If disabled — cached analytics would still serve even though the project
+// is now inactive. If re-enabled — stale data from before the disable clears out.
+cacheBustProject($projectId);
 
 sendResponse(
     true,

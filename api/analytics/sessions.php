@@ -14,11 +14,18 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     sendResponse(false, "Method not allowed", null, 405);
 }
 
-rateLimitOrBlock($_SERVER["REMOTE_ADDR"] . "_sessions", 60, 60);
+rateLimitOrBlock(getClientIp() . "_sessions", 60, 60);
 
 $project = verifySecretKey($conn);
 $projectId = (int) $project["id"];
 $range = parseDateRange();
+
+// ── Cache lookup ─────────────────────────────────────────────────
+$cacheKey = "analytics:sessions:{$projectId}:{$range["from"]}:{$range["to"]}";
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Session analytics fetched successfully", $cached);
+}
 
 // Average session duration (seconds) and avg pages per session
 // Duration = last_activity - started_at
@@ -97,7 +104,7 @@ $bounceRate =
         ? round(($bouncedSessions / $totalSessions) * 100, 1)
         : 0;
 
-sendResponse(true, "Session analytics fetched successfully", [
+$data = [
     "range" => $range,
     "total_sessions" => $totalSessions,
     "bounce_rate" => $bounceRate,
@@ -106,5 +113,7 @@ sendResponse(true, "Session analytics fetched successfully", [
     "avg_pages_per_session" =>
         (float) ($pagesRow["avg_pages_per_session"] ?? 0),
     "over_time" => $overTime,
-]);
+];
+cacheSet($cacheKey, $data, 300);
+sendResponse(true, "Session analytics fetched successfully", $data);
 ?>
