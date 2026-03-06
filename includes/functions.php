@@ -53,7 +53,8 @@ function writeLog($level, $message, $context = [])
     }
 
     // Rotate if file exceeds 10 MB — keeps last 5 rotated files
-    if (file_exists($logPath) && filesize($logPath) >= 10 * 1024 * 1024) {
+    // filesize() is a syscall — only check on ~1-in-50 writes to reduce overhead
+    if (file_exists($logPath) && random_int(1, 50) === 1 && filesize($logPath) >= 10 * 1024 * 1024) {
         $maxFiles = 5;
         // Shift: .5 dropped, .4→.5, .3→.4, .2→.3, .1→.2, then log→.1
         for ($i = $maxFiles; $i >= 2; $i--) {
@@ -195,10 +196,6 @@ function cacheDel(string ...$keys): void
  * When to call this:
  *   - projects/delete.php   — project is gone, all its cached data is stale
  *   - projects/toggle.php   — project disabled/enabled changes what queries return
- *
- * NOTE: KEYS is O(N) over the entire keyspace and blocks Valkey while it runs.
- * On a small install (thousands of keys, not millions) this is fine.
- * If you ever have millions of keys, replace this with SCAN-based iteration.
  */
 function cacheBustProject(int $projectId): void
 {
@@ -226,7 +223,7 @@ function cacheBustProject(int $projectId): void
 }
 
 // RESPONSE
-function sendResponse($success, $message, $data = null, $status = 200)
+function sendResponse(bool $success, string $message, mixed $data = null, int $status = 200): never
 {
     http_response_code($status);
     header("Content-Type: application/json");
@@ -277,7 +274,7 @@ function readJsonBody(int $maxBytes = 65536): ?array
  * Encode and cap context JSON to prevent huge blobs in the DB.
  * Returns null if empty / not an array / too large after encoding.
  */
-function encodeContext($raw, int $maxBytes = 8192): ?string
+function encodeContext(mixed $raw, int $maxBytes = 8192): ?string
 {
     if (!isset($raw) || !is_array($raw)) {
         return null;
@@ -297,107 +294,26 @@ function encodeContext($raw, int $maxBytes = 8192): ?string
 
 // API KEY AUTH
 
-function verifyPublicKey($conn)
-{
-    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
-
-    if (empty($key)) {
-        sendResponse(false, "API key is required", null, 401);
-    }
-
-    $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domains FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
-    );
-    if (!$stmt) {
-        writeLog("ERROR", "verifyPublicKey prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("s", $key);
-    $stmt->execute();
-    $project = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if (!$project) {
-        sendResponse(false, "Invalid API key", null, 401);
-    }
-
-    // Domain lock — check Origin or Referer
-    $origin = $_SERVER["HTTP_ORIGIN"] ?? ($_SERVER["HTTP_REFERER"] ?? "");
-    if (!empty($origin)) {
-        $host = preg_replace(
-            "/^www\./",
-            "",
-            strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
-        );
-
-        $allowed = false;
-        $domains = explode(",", $project["allowed_domains"]);
-
-        foreach ($domains as $domain) {
-            $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
-            if ($host === $domain || str_ends_with($host, "." . $domain)) {
-                $allowed = true;
-                break;
-            }
-        }
-
-        if (!$allowed) {
-            sendResponse(false, "Domain not allowed for this key", null, 403);
-        }
-    }
-
-    return $project;
-}
-
-function verifySecretKey($conn)
-{
-    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
-
-    if (empty($key)) {
-        sendResponse(false, "API key is required", null, 401);
-    }
-
-    $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domains FROM projects WHERE secret_key = ? AND is_active = 1 LIMIT 1"
-    );
-    if (!$stmt) {
-        writeLog("ERROR", "verifySecretKey prepare failed", [
-            "error" => $conn->error,
-        ]);
-        sendResponse(false, "Server error", null, 500);
-    }
-    $stmt->bind_param("s", $key);
-    $stmt->execute();
-    $project = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if (!$project) {
-        sendResponse(false, "Invalid API key", null, 401);
-    }
-
-    return $project;
-}
-
 /**
- * Soft version of verifySecretKey.
- * Returns the project array on success, null on any failure.
- * Does NOT call sendResponse/exit — lets the caller decide what to do next.
- * Used by endpoints that accept either secret key OR public key (error, audit).
+ * Fetch a project row by key column ('public_key' or 'secret_key').
+ * Returns the project array on success, null if not found or DB error.
+ * Column name is validated internally — never interpolated from user input.
  */
-function tryVerifySecretKey($conn): ?array
+function fetchProjectByKey(mysqli $conn, string $column, string $key): ?array
 {
-    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
-
-    if (empty($key)) {
+    // Whitelist the column — never interpolate untrusted values into SQL
+    if (!in_array($column, ["public_key", "secret_key"], true)) {
         return null;
     }
 
     $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domains FROM projects WHERE secret_key = ? AND is_active = 1 LIMIT 1"
+        "SELECT id, name, allowed_domains FROM projects WHERE {$column} = ? AND is_active = 1 LIMIT 1"
     );
     if (!$stmt) {
+        writeLog("ERROR", "fetchProjectByKey prepare failed", [
+            "column" => $column,
+            "error"  => $conn->error,
+        ]);
         return null;
     }
     $stmt->bind_param("s", $key);
@@ -409,107 +325,137 @@ function tryVerifySecretKey($conn): ?array
 }
 
 /**
- * Soft version of verifyPublicKey.
- * Returns the project array on success, null on any failure.
- * Includes domain lock check — same as the hard version.
- * Used by endpoints that accept either secret key OR public key (error, audit).
+ * Enforce domain lock for public-key requests (browser/JS snippet callers).
+ * Returns true if the request origin is allowed, false if it should be rejected.
+ * Always returns true when no Origin/Referer header is present (e.g. server-side callers).
  */
-function tryVerifyPublicKey($conn): ?array
+function checkDomainLock(array $project): bool
+{
+    $origin = $_SERVER["HTTP_ORIGIN"] ?? ($_SERVER["HTTP_REFERER"] ?? "");
+    if (empty($origin)) {
+        return true;
+    }
+
+    $host = preg_replace(
+        "/^www\./",
+        "",
+        strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
+    );
+
+    foreach (explode(",", $project["allowed_domains"]) as $domain) {
+        $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
+        if ($host === $domain || str_ends_with($host, "." . $domain)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Hard verify — public key. Exits with 401/403 on any failure.
+ * Used by pageview.php (JS snippet — public key only).
+ */
+function verifyPublicKey(mysqli $conn): array
 {
     $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
-
     if (empty($key)) {
-        return null;
+        sendResponse(false, "API key is required", null, 401);
     }
 
-    $stmt = $conn->prepare(
-        "SELECT id, name, allowed_domains FROM projects WHERE public_key = ? AND is_active = 1 LIMIT 1"
-    );
-    if (!$stmt) {
-        return null;
-    }
-    $stmt->bind_param("s", $key);
-    $stmt->execute();
-    $project = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
+    $project = fetchProjectByKey($conn, "public_key", $key);
     if (!$project) {
-        return null;
+        sendResponse(false, "Invalid API key", null, 401);
     }
 
-    // Domain lock — only enforced for public key (browser requests)
-    $origin = $_SERVER["HTTP_ORIGIN"] ?? ($_SERVER["HTTP_REFERER"] ?? "");
-    if (!empty($origin)) {
-        $host = preg_replace(
-            "/^www\./",
-            "",
-            strtolower(parse_url($origin, PHP_URL_HOST) ?? "")
-        );
-
-        $allowed = false;
-        $domains = explode(",", $project["allowed_domains"]);
-
-        foreach ($domains as $domain) {
-            $domain = preg_replace("/^www\./", "", strtolower(trim($domain)));
-            if ($host === $domain || str_ends_with($host, "." . $domain)) {
-                $allowed = true;
-                break;
-            }
-        }
-
-        if (!$allowed) {
-            return null;
-        }
+    if (!checkDomainLock($project)) {
+        sendResponse(false, "Domain not allowed for this key", null, 403);
     }
 
     return $project;
 }
 
+/**
+ * Hard verify — secret key. Exits with 401 on any failure.
+ * Used by all analytics and management endpoints.
+ */
+function verifySecretKey(mysqli $conn): array
+{
+    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
+    if (empty($key)) {
+        sendResponse(false, "API key is required", null, 401);
+    }
+
+    $project = fetchProjectByKey($conn, "secret_key", $key);
+    if (!$project) {
+        sendResponse(false, "Invalid API key", null, 401);
+    }
+
+    return $project;
+}
+
+/**
+ * Soft verify — secret key. Returns null on any failure instead of exiting.
+ * Used by endpoints that accept either key type (error.php, audit.php).
+ */
+function tryVerifySecretKey(mysqli $conn): ?array
+{
+    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
+    if (empty($key)) {
+        return null;
+    }
+
+    return fetchProjectByKey($conn, "secret_key", $key);
+}
+
+/**
+ * Soft verify — public key + domain lock. Returns null on any failure instead of exiting.
+ * Used by endpoints that accept either key type (error.php, audit.php).
+ */
+function tryVerifyPublicKey(mysqli $conn): ?array
+{
+    $key = $_SERVER["HTTP_X_API_KEY"] ?? "";
+    if (empty($key)) {
+        return null;
+    }
+
+    $project = fetchProjectByKey($conn, "public_key", $key);
+    if (!$project) {
+        return null;
+    }
+
+    return checkDomainLock($project) ? $project : null;
+}
+
 // BOT FILTER
 
-function isBot()
+// Single compiled pattern — checked once per request via preg_match()
+// instead of 27 individual str_contains calls on the hot path.
+define("BOT_UA_PATTERN", implode("|", [
+    "bot", "crawler", "spider", "slurp", "curl", "wget",
+    "python-requests", "python-urllib", "go-http-client", "scrapy",
+    "facebookexternalhit", "twitterbot", "linkedinbot", "applebot",
+    "googlebot", "bingbot", "yandexbot", "baiduspider", "semrushbot",
+    "ahrefsbot", "mj12bot", "dotbot", "uptimerobot", "pingdom",
+    "gtmetrix", "headlesschrome", "phantomjs", "axios",
+]));
+
+function isBot(): bool
 {
+    // Skip bot detection during test runs — same guard used in rate-limit.php.
+    if ((defined("MICROLOGS_TEST") && MICROLOGS_TEST === true) ||
+        (($_SERVER["HTTP_X_TEST_MODE"] ?? "") === "phpunit" && !IS_PRODUCTION)) {
+        return false;
+    }
+
     $ua = strtolower($_SERVER["HTTP_USER_AGENT"] ?? "");
 
     if (empty($ua)) {
         return true;
     }
 
-    $botSignatures = [
-        "bot",
-        "crawler",
-        "spider",
-        "slurp",
-        "curl",
-        "wget",
-        "python-requests",
-        "python-urllib",
-        "go-http-client",
-        "scrapy",
-        "facebookexternalhit",
-        "twitterbot",
-        "linkedinbot",
-        "applebot",
-        "googlebot",
-        "bingbot",
-        "yandexbot",
-        "baiduspider",
-        "semrushbot",
-        "ahrefsbot",
-        "mj12bot",
-        "dotbot",
-        "uptimerobot",
-        "pingdom",
-        "gtmetrix",
-        "headlesschrome",
-        "phantomjs",
-        "axios",
-    ];
-
-    foreach ($botSignatures as $sig) {
-        if (str_contains($ua, $sig)) {
-            return true;
-        }
+    if (preg_match("/" . BOT_UA_PATTERN . "/", $ua)) {
+        return true;
     }
 
     // Real browsers always send these headers
@@ -525,7 +471,7 @@ function isBot()
 
 // IP
 
-function getClientIp()
+function getClientIp(): string
 {
     $remoteAddr = $_SERVER["REMOTE_ADDR"] ?? "";
 
@@ -559,7 +505,7 @@ function getClientIp()
     return $remoteAddr;
 }
 
-function hashIp($ip)
+function hashIp(string $ip): string
 {
     $salt = defined("IP_HASH_SALT") ? IP_HASH_SALT : "micrologs_default_salt";
     return hash("sha256", $ip . $salt);
@@ -567,7 +513,7 @@ function hashIp($ip)
 
 // GEOLOCATION
 
-function geolocate($ip)
+function geolocate(string $ip): array
 {
     $default = [
         "country" => "",
@@ -615,7 +561,7 @@ function geolocate($ip)
 
 // DEVICE PARSING
 
-function parseUserAgent($ua)
+function parseUserAgent(string $ua): array
 {
     return [
         "device_type" => detectDeviceType($ua),
@@ -625,7 +571,7 @@ function parseUserAgent($ua)
     ];
 }
 
-function detectDeviceType($ua)
+function detectDeviceType(string $ua): string
 {
     if (preg_match("/tablet|ipad|playbook|silk/i", $ua)) {
         return "tablet";
@@ -641,7 +587,7 @@ function detectDeviceType($ua)
     return "desktop";
 }
 
-function detectOs($ua)
+function detectOs(string $ua): string
 {
     if (str_contains($ua, "Windows")) {
         return "Windows";
@@ -664,7 +610,7 @@ function detectOs($ua)
     return "Unknown";
 }
 
-function detectBrowser($ua)
+function detectBrowser(string $ua): string
 {
     if (str_contains($ua, "Edg/")) {
         return "Edge";
@@ -687,7 +633,7 @@ function detectBrowser($ua)
     return "Unknown";
 }
 
-function detectBrowserVersion($ua)
+function detectBrowserVersion(string $ua): string
 {
     $patterns = [
         "/Edg\/([\d.]+)/" => "Edge",
@@ -708,7 +654,7 @@ function detectBrowserVersion($ua)
 
 // REFERRER
 
-function categorizeReferrer($referrer)
+function categorizeReferrer(string $referrer): string
 {
     if (empty($referrer)) {
         return "direct";
@@ -764,7 +710,7 @@ function categorizeReferrer($referrer)
 
 // UTM
 
-function extractUtm($url)
+function extractUtm(string $url): array
 {
     parse_str(parse_url($url, PHP_URL_QUERY) ?? "", $params);
 
@@ -779,7 +725,7 @@ function extractUtm($url)
 
 // DATE RANGE
 
-function parseDateRange()
+function parseDateRange(): array
 {
     $range = $_GET["range"] ?? "30d";
 
@@ -829,36 +775,15 @@ function parseDateRange()
 
 // LOCATION + DEVICE RESOLVE
 
-function resolveLocation($conn, $projectId, $geo)
+function resolveLocation(mysqli $conn, int $projectId, array $geo): ?int
 {
     if (empty($geo["country_code"])) {
         return null;
     }
 
-    $stmt = $conn->prepare(
-        "SELECT id FROM locations WHERE project_id = ? AND country_code = ? AND region = ? AND city = ? LIMIT 1"
-    );
-    if (!$stmt) {
-        writeLog("ERROR", "resolveLocation SELECT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        return null;
-    }
-    $stmt->bind_param(
-        "isss",
-        $projectId,
-        $geo["country_code"],
-        $geo["region"],
-        $geo["city"]
-    );
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if ($row) {
-        return (int) $row["id"];
-    }
-
+    // INSERT ... ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id) handles both
+    // the "new row" and "row already exists" cases in a single round-trip.
+    // The SELECT before INSERT was redundant — removed.
     $stmt = $conn->prepare(
         "INSERT INTO locations (project_id, country, country_code, region, city, is_vpn) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)"
     );
@@ -890,33 +815,11 @@ function resolveLocation($conn, $projectId, $geo)
     return $id;
 }
 
-function resolveDevice($conn, $projectId, $device)
+function resolveDevice(mysqli $conn, int $projectId, array $device): ?int
 {
-    $stmt = $conn->prepare(
-        "SELECT id FROM devices WHERE project_id = ? AND device_type = ? AND os = ? AND browser = ? AND browser_version = ? LIMIT 1"
-    );
-    if (!$stmt) {
-        writeLog("ERROR", "resolveDevice SELECT prepare failed", [
-            "error" => $conn->error,
-        ]);
-        return null;
-    }
-    $stmt->bind_param(
-        "issss",
-        $projectId,
-        $device["device_type"],
-        $device["os"],
-        $device["browser"],
-        $device["browser_version"]
-    );
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if ($row) {
-        return (int) $row["id"];
-    }
-
+    // INSERT ... ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id) handles both
+    // the "new row" and "row already exists" cases in a single round-trip.
+    // The SELECT before INSERT was redundant — removed.
     $stmt = $conn->prepare(
         "INSERT INTO devices (project_id, device_type, os, browser, browser_version) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)"
     );

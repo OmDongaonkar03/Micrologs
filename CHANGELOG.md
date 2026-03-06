@@ -4,6 +4,97 @@ All notable changes to Micrologs will be documented here.
 
 ---
 
+## [2.1.0] - 2026-03-06
+
+Schema and code optimization pass. No new endpoints, no breaking changes — drop-in replacement for v2.0.0.
+
+### Fixed
+
+**`includes/functions.php`**
+- `resolveLocation()` — removed the SELECT before INSERT. The `UNIQUE KEY` + `ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)` on the INSERT handles the "already exists" case inside MySQL. Halves the DB round-trips per tracked event for location resolution.
+- `resolveDevice()` — same fix as `resolveLocation()`. Combined, every tracked pageview and error now costs 2 fewer DB queries.
+- Extracted `fetchProjectByKey($conn, $column, $key)` — shared DB lookup used by all four key verification functions. Previously the same `SELECT` query was copy-pasted into `verifyPublicKey`, `verifySecretKey`, `tryVerifyPublicKey`, and `tryVerifySecretKey`.
+- Extracted `checkDomainLock($project)` — shared domain validation logic used by `verifyPublicKey` and `tryVerifyPublicKey`. Previously the same `preg_replace` + `foreach` loop was duplicated in both.
+- `isBot()` — replaced 27 individual `str_contains` calls with a single `preg_match` against a compiled `|`-alternation pattern (`BOT_UA_PATTERN` constant). Runs on every tracking request.
+- `writeLog()` — `filesize()` syscall now only runs on ~1-in-50 writes instead of every write. A 10 MB log file won't grow meaningfully in the skipped checks.
+
+**`authorization/.env.example.php`**
+- Added `TIMEZONE` constant (PHP IANA zone name) alongside the existing `APP_TIMEZONE` (MySQL offset). Both are now documented with inline comments explaining which system uses each.
+
+**`schema.sql`**
+- Dropped redundant plain `KEY` indexes that duplicated existing `UNIQUE KEY` indexes: `idx_secret_key` and `idx_public_key` on `projects`, `idx_session_token` on `sessions`, `idx_code` on `tracked_links`. A `UNIQUE KEY` in MySQL/MariaDB already creates a B-tree index — maintaining a second identical index is pure write overhead.
+- Dropped standalone `idx_project_id` indexes on `pageviews`, `sessions`, `error_groups`, and `audit_logs` where a composite index starting with `project_id` already exists and covers any query filtering on `project_id` alone.
+- Dropped `idx_dedup` on `pageviews` — a 4-column index with a 255-byte URL prefix, added in v1.1.0 for a deduplication query path that was subsequently changed. No query uses this index.
+- Replaced standalone `idx_project_id` + `idx_created_at` on `error_events` with a single composite `idx_project_created (project_id, created_at)` that covers both.
+- `visitors.fingerprint_hash` — changed from `NOT NULL DEFAULT ''` to `DEFAULT NULL`. Empty string entries in the `idx_fingerprint` index were noise; nullable columns are excluded from the index entirely when null.
+- Added `created_at datetime NOT NULL DEFAULT current_timestamp()` to `locations` and `devices` tables for observability.
+
+### Migration
+
+For existing installs upgrading from v2.0.0:
+
+**1. Update `env.php`** — add the new `TIMEZONE` constant alongside the existing `APP_TIMEZONE`:
+
+```php
+// Keep this — used for MySQL SET time_zone:
+define("APP_TIMEZONE", "+05:30");
+
+// Add this — used for PHP date_default_timezone_set():
+define("TIMEZONE", "Asia/Kolkata"); // set to your IANA timezone name
+```
+
+`APP_TIMEZONE` and `TIMEZONE` must represent the same offset. Common pairs: `+05:30` / `Asia/Kolkata`, `+00:00` / `UTC`, `+01:00` / `Europe/Paris`.
+
+**2. Apply schema changes** — run the following against your `micrologs` database:
+
+```sql
+-- Drop redundant duplicate indexes
+ALTER TABLE `projects`
+  DROP KEY `idx_secret_key`,
+  DROP KEY `idx_public_key`;
+
+ALTER TABLE `sessions`
+  DROP KEY `idx_session_token`,
+  DROP KEY `idx_project_id`;
+
+ALTER TABLE `tracked_links`
+  DROP KEY `idx_code`;
+
+-- Drop standalone project_id indexes made redundant by composites
+ALTER TABLE `pageviews`
+  DROP KEY `idx_project_id`,
+  DROP KEY `idx_dedup`;
+
+ALTER TABLE `error_groups`
+  DROP KEY `idx_project_id`;
+
+ALTER TABLE `audit_logs`
+  DROP KEY `idx_project_id`;
+
+-- Replace two indexes on error_events with one composite
+ALTER TABLE `error_events`
+  DROP KEY `idx_project_id`,
+  DROP KEY `idx_created_at`,
+  ADD KEY `idx_project_created` (`project_id`, `created_at`);
+
+-- Fix fingerprint_hash on visitors
+ALTER TABLE `visitors`
+  MODIFY `fingerprint_hash` char(64) DEFAULT NULL;
+
+-- Add created_at to dimension tables
+ALTER TABLE `locations`
+  ADD COLUMN `created_at` datetime NOT NULL DEFAULT current_timestamp();
+
+ALTER TABLE `devices`
+  ADD COLUMN `created_at` datetime NOT NULL DEFAULT current_timestamp();
+```
+
+**3. Deploy updated files** — `authorization/config.php`, `includes/functions.php`, `authorization/.env.example.php`.
+
+No new tables, no removed columns, no queue or worker changes. Workers do not need to be restarted.
+
+---
+
 ## [2.0.0] - 2026-03-05
 
 Infrastructure release. All tracking writes are now async. All analytics reads are cached. Requires Valkey (or Redis) and Supervisor on the server. Shared hosting users on v1.3.x are unaffected — v2 is opt-in via a VPS deployment.

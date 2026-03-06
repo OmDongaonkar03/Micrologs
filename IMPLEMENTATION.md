@@ -78,7 +78,11 @@ define("DB_PASS",       "your_db_password");
 define("DB_NAME",       "micrologs");
 
 define("APP_URL",       "https://yourdomain.com");
+
+// MySQL timezone offset — passed to SET time_zone
 define("APP_TIMEZONE",  "+05:30");
+// PHP IANA timezone name — passed to date_default_timezone_set()
+// Must represent the same offset as APP_TIMEZONE.
 define("TIMEZONE",      "Asia/Kolkata");
 
 define("ADMIN_KEY",       "generate_a_long_random_string");
@@ -107,6 +111,8 @@ define("VALKEY_PASSWORD", "");
 > echo bin2hex(random_bytes(32));
 > ```
 > Use one output for `ADMIN_KEY` and a separate output for `IP_HASH_SALT`. Never use the same value for both.
+
+> **Note on timezones** — two constants are required. `APP_TIMEZONE` is a MySQL-compatible offset (e.g. `+05:30`) passed to `SET time_zone`. `TIMEZONE` is a PHP IANA zone name (e.g. `Asia/Kolkata`) passed to `date_default_timezone_set()`. PHP does not accept offset strings like `+05:30` as timezone identifiers — you must use the named zone. Both constants must represent the same offset.
 
 > **Note on `Geo_IP2_LICENSE_KEY`** - this constant is not used at runtime. It is only needed when downloading the GeoLite2 database file (see Step 5). You do not need to define it in `env.php`.
 
@@ -229,9 +235,9 @@ You should see three programs running — `micrologs-pageview`, `micrologs-error
 **Useful commands:**
 
 ```bash
-sudo supervisorctl status                     # check all workers
-sudo supervisorctl restart micrologs-pageview:*  # restart pageview workers
-sudo supervisorctl tail -f micrologs-pageview_00 stdout  # tail worker log
+sudo supervisorctl status                               # check all workers
+sudo supervisorctl restart micrologs-pageview:*         # restart pageview workers
+sudo supervisorctl tail -f micrologs-pageview_00 stdout # tail worker log
 ```
 
 **Test locally without Supervisor:**

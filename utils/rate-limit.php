@@ -22,6 +22,20 @@ function rateLimitOrBlock(
     int $windowSeconds,
     int $blockSeconds = 900
 ): void {
+    // Skip rate limiting entirely during test runs.
+    // Tests make many rapid requests from the same IP against the same
+    // endpoints — enforcing limits causes 429s that have nothing to do
+    // with the behaviour being tested.
+    // Skip during PHPUnit runs.
+    // MICROLOGS_TEST covers CLI context (WorkerTest).
+    // X-Test-Mode covers API tests — Apache is a separate process where
+    // phpunit.xml <env> tags don't reach, so we pass a header instead.
+    // The !IS_PRODUCTION guard ensures the header bypass is dead code in production.
+    if ((defined("MICROLOGS_TEST") && MICROLOGS_TEST === true) ||
+        (($_SERVER["HTTP_X_TEST_MODE"] ?? "") === "phpunit" && !IS_PRODUCTION)) {
+        return;
+    }
+
     $key = hash("sha256", $identifier);
     $countKey = "rl:count:{$key}";
     $blockKey = "rl:block:{$key}";

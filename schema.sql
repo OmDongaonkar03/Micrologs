@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 27, 2026 at 08:05 PM
+-- Generation Time: Mar 06, 2026 at 09:50 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -49,7 +49,8 @@ CREATE TABLE `devices` (
   `device_type` enum('desktop','mobile','tablet','unknown') NOT NULL DEFAULT 'unknown',
   `os` varchar(50) NOT NULL DEFAULT '',
   `browser` varchar(50) NOT NULL DEFAULT '',
-  `browser_version` varchar(20) NOT NULL DEFAULT ''
+  `browser_version` varchar(20) NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -88,7 +89,7 @@ CREATE TABLE `error_groups` (
   `line` int(10) UNSIGNED DEFAULT NULL,
   `severity` enum('info','warning','error','critical') NOT NULL DEFAULT 'error',
   `environment` enum('production','staging','development','unknown') NOT NULL DEFAULT 'production',
-  `status` enum('open','investigating','resolved','ignored') NOT NULL DEFAULT 'open',
+  `status` enum('open','resolved','ignored') NOT NULL DEFAULT 'open',
   `occurrence_count` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `first_seen` datetime NOT NULL DEFAULT current_timestamp(),
   `last_seen` datetime NOT NULL DEFAULT current_timestamp()
@@ -125,7 +126,8 @@ CREATE TABLE `locations` (
   `country_code` char(2) NOT NULL DEFAULT '',
   `region` varchar(100) NOT NULL DEFAULT '',
   `city` varchar(100) NOT NULL DEFAULT '',
-  `is_vpn` tinyint(1) NOT NULL DEFAULT 0
+  `is_vpn` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -214,7 +216,7 @@ CREATE TABLE `visitors` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `project_id` int(10) UNSIGNED NOT NULL,
   `visitor_hash` char(64) NOT NULL,
-  `fingerprint_hash` char(64) NOT NULL DEFAULT '',
+  `fingerprint_hash` char(64) DEFAULT NULL,
   `first_seen` datetime NOT NULL DEFAULT current_timestamp(),
   `last_seen` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -228,7 +230,6 @@ CREATE TABLE `visitors` (
 --
 ALTER TABLE `audit_logs`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_project_id` (`project_id`),
   ADD KEY `idx_action` (`project_id`,`action`),
   ADD KEY `idx_created_at` (`created_at`);
 
@@ -247,7 +248,7 @@ ALTER TABLE `error_events`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_group_id` (`group_id`),
   ADD KEY `idx_project_id` (`project_id`),
-  ADD KEY `idx_created_at` (`created_at`);
+  ADD KEY `idx_project_created` (`project_id`,`created_at`);
 
 --
 -- Indexes for table `error_groups`
@@ -255,7 +256,6 @@ ALTER TABLE `error_events`
 ALTER TABLE `error_groups`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_fingerprint` (`project_id`,`fingerprint`),
-  ADD KEY `idx_project_id` (`project_id`),
   ADD KEY `idx_status` (`project_id`,`status`),
   ADD KEY `idx_severity` (`project_id`,`severity`),
   ADD KEY `idx_last_seen` (`project_id`,`last_seen`);
@@ -282,14 +282,12 @@ ALTER TABLE `locations`
 --
 ALTER TABLE `pageviews`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_project_id` (`project_id`),
   ADD KEY `idx_session_id` (`session_id`),
   ADD KEY `idx_visitor_id` (`visitor_id`),
   ADD KEY `idx_created_at` (`created_at`),
   ADD KEY `idx_url` (`project_id`,`url`(255)),
   ADD KEY `idx_referrer_category` (`project_id`,`referrer_category`),
-  ADD KEY `idx_project_created` (`project_id`,`created_at`),
-  ADD KEY `idx_dedup` (`project_id`,`visitor_id`,`url`(255),`created_at`);
+  ADD KEY `idx_project_created` (`project_id`,`created_at`);
 
 --
 -- Indexes for table `projects`
@@ -297,9 +295,7 @@ ALTER TABLE `pageviews`
 ALTER TABLE `projects`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `secret_key` (`secret_key`),
-  ADD UNIQUE KEY `public_key` (`public_key`),
-  ADD KEY `idx_secret_key` (`secret_key`),
-  ADD KEY `idx_public_key` (`public_key`);
+  ADD UNIQUE KEY `public_key` (`public_key`);
 
 --
 -- Indexes for table `sessions`
@@ -307,9 +303,7 @@ ALTER TABLE `projects`
 ALTER TABLE `sessions`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `session_token` (`session_token`),
-  ADD KEY `idx_project_id` (`project_id`),
   ADD KEY `idx_visitor_id` (`visitor_id`),
-  ADD KEY `idx_session_token` (`session_token`),
   ADD KEY `idx_started_at` (`started_at`),
   ADD KEY `idx_project_started` (`project_id`,`started_at`);
 
@@ -319,7 +313,6 @@ ALTER TABLE `sessions`
 ALTER TABLE `tracked_links`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `code` (`code`),
-  ADD KEY `idx_code` (`code`),
   ADD KEY `idx_project_id` (`project_id`);
 
 --
@@ -393,7 +386,7 @@ ALTER TABLE `sessions`
 -- AUTO_INCREMENT for table `tracked_links`
 --
 ALTER TABLE `tracked_links`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=91;
 
 --
 -- AUTO_INCREMENT for table `visitors`

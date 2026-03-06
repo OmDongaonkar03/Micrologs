@@ -65,16 +65,6 @@ if ($confirm !== $project["name"]) {
 
 // ── Delete project (cascade handled by FK constraints, or manual) ─
 // Delete child data first in case FK constraints are not set to CASCADE
-$tables = [
-    "link_clicks" => "link_id", // via tracked_links
-    "tracked_links" => "project_id",
-    "pageviews" => "project_id",
-    "sessions" => "project_id",
-    "error_logs" => "project_id",
-    "audit_logs" => "project_id",
-];
-
-// link_clicks references tracked_links, so delete those first
 $stmt = $conn->prepare(
     "DELETE lc FROM link_clicks lc
      INNER JOIN tracked_links tl ON lc.link_id = tl.id
@@ -90,6 +80,9 @@ $directTables = [
     "tracked_links",
     "pageviews",
     "sessions",
+    "visitors",
+    "devices",
+    "locations",
     "error_groups",
     "audit_logs",
 ];

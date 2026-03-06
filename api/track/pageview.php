@@ -19,12 +19,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
 rateLimitOrBlock(getClientIp() . "_pageview", 60, 60);
 
-// Block bots before doing anything
-if (isBot()) {
-    http_response_code(204);
-    exit();
-}
-
+// Auth and validation run first so invalid/missing keys and bad payloads
+// always get the correct 401/400 response — even from bot user-agents.
 $project = verifyPublicKey($conn);
 $projectId = (int) $project["id"];
 
@@ -51,6 +47,13 @@ if (empty($url) || empty($visitorId) || empty($sessionToken)) {
         null,
         400
     );
+}
+
+// Block bots only after auth + validation — ensures auth/validation errors
+// are surfaced correctly rather than being swallowed by a 204 early exit.
+if (isBot()) {
+    http_response_code(204);
+    exit();
 }
 
 // --- Server-side enrichment --------------------------------------

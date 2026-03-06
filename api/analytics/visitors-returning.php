@@ -49,7 +49,7 @@ if (!$stmt) {
     sendResponse(false, "Server error", null, 500);
 }
 $stmt->bind_param(
-    "sssiiss",
+    "sssiss",
     $range["from"],
     $range["to"], // new: first_seen within range
     $range["from"], // returning: first_seen before range
@@ -95,7 +95,7 @@ if (!$stmt) {
     sendResponse(false, "Server error", null, 500);
 }
 $stmt->bind_param(
-    "sssiiss",
+    "sssiss",
     $range["from"],
     $range["to"],
     $range["from"],

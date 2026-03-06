@@ -119,11 +119,12 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Stage | Status | What's included |
 |---|---|---|
-| v1.0 - REST API | Shipped | Full analytics, error tracking, audit logs, link tracking |
-| v1.1 - Security & Performance | Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
-| v1.2 - Analytics Depth | Shipped | Session analytics, new vs returning visitors, error trends over time |
-| v1.3 - Complete API | Shipped | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
-| v2 - Infrastructure | Shipped | Async queue (Valkey), background workers, analytics caching, cache invalidation |
+| v1.0 - REST API | ✅ Shipped | Full analytics, error tracking, audit logs, link tracking |
+| v1.1 - Security & Performance | ✅ Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
+| v1.2 - Analytics Depth | ✅ Shipped | Session analytics, new vs returning visitors, error trends over time |
+| v1.3 - Complete API | ✅ Shipped | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
+| v2 - Infrastructure | ✅ Shipped | Async queue (Valkey), background workers, analytics caching, cache invalidation |
+| v2.1 - Optimization | ✅ Shipped | Schema cleanup, unified timezone, reduced DB round-trips, deduped auth helpers, faster bot filter |
 | v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 
 ---

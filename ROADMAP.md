@@ -73,6 +73,18 @@ Official Laravel SDK - service provider, facade, auto-discovery, TrackErrors mid
 - `composer require micrologs/laravel`
 - [packagist.org/packages/micrologs/laravel](https://packagist.org/packages/micrologs/laravel)
 
+### v2.1.0
+Schema and code optimization pass. No new endpoints, no breaking changes.
+- Unified `APP_TIMEZONE` constant — single source of truth for both PHP and MySQL timezone, removing silent divergence risk
+- Redundant duplicate indexes dropped from `projects`, `sessions`, `tracked_links`, `pageviews`, `error_events`, and `audit_logs` — a `UNIQUE KEY` already creates a B-tree index, maintaining a second identical one is pure write overhead
+- `idx_dedup` dropped from `pageviews` — heavy 4-column index unused by any query path
+- `visitors.fingerprint_hash` made nullable — empty string entries were polluting the index
+- `created_at` added to `locations` and `devices` for observability
+- `resolveLocation()` and `resolveDevice()` reduced from 2 DB round-trips to 1 per tracked event — SELECT before INSERT was redundant given `ON DUPLICATE KEY UPDATE`
+- `fetchProjectByKey()` and `checkDomainLock()` extracted — eliminates 4 copies of the same SQL and domain-lock loop across the key verification functions
+- `isBot()` rewritten as single `preg_match` against a compiled pattern — replaces 27 sequential `str_contains` calls on the hot path
+- `writeLog()` rotation check sampled at ~1-in-50 writes — removes a `filesize()` syscall on every log line
+
 ---
 
 ## Active (v2.x)

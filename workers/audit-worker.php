@@ -12,8 +12,6 @@
     ===============================================================
 */
 
-define("RUNNING_AS_WORKER", true);
-
 require_once __DIR__ . "/../includes/functions.php";
 
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);

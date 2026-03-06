@@ -3,3 +3,9 @@ utils/geoip/*.mmdb
 utils/rate_limits/
 utils/rate_blocks/
 authorization/env.php
+tests/.phpunit.result.cache
+tests/phpunit.xml
+logs/
+
+# Add tests/ to the ignore list to prevent accidentally committing test files to production.
+# tests/
