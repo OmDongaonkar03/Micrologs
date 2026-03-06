@@ -4,12 +4,12 @@
 
 | Version | Supported |
 |---|---|
-| 1.3.x | Active |
-| 1.2.x | Security fixes only |
-| 1.1.x | No longer supported |
-| 1.0.x | No longer supported |
+| 2.1.x | ✅ Active (current stable) |
+| 2.0.x | Security fixes only |
+| 1.3.1 | Security fixes only |
+| 1.3.0 and below | No longer supported |
 
-Upgrade to the latest version. Security fixes are backported to the previous minor version only.
+Upgrade to the latest version. Security fixes are backported to the previous stable release only.
 
 ---
 

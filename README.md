@@ -110,8 +110,8 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Engine | Node SDK | Python SDK | Laravel SDK |
 |---|---|---|---|
-| v2.0.0 *(current)* | v1.1.0 | v1.0.0 | v1.0.0 |
-| v1.3.x | v1.0.0 | v1.0.0 | v1.0.0 |
+| v2.1.0 *(current)* | v1.1.0 | v1.0.0 | v1.0.0 |
+| v1.3.1 *(shared hosting stable)* | v1.0.0 | v1.0.0 | v1.0.0 |
 
 ---
 
@@ -119,12 +119,13 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Stage | Status | What's included |
 |---|---|---|
-| v1.0 - REST API | ✅ Shipped | Full analytics, error tracking, audit logs, link tracking |
-| v1.1 - Security & Performance | ✅ Shipped | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
-| v1.2 - Analytics Depth | ✅ Shipped | Session analytics, new vs returning visitors, error trends over time |
-| v1.3 - Complete API | ✅ Shipped | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
+| v1.0 - REST API | ✅ Shipped (pre-release) | Full analytics, error tracking, audit logs, link tracking |
+| v1.1 - Security & Performance | ✅ Shipped (pre-release) | IP spoofing fix, payload caps, query reduction, log rotation, request ID in logs |
+| v1.2 - Analytics Depth | ✅ Shipped (pre-release) | Session analytics, new vs returning visitors, error trends over time |
+| v1.3 - Complete API | ✅ Shipped (pre-release) | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
+| v1.3.1 - First stable | ✅ Stable | Setup wizard, bug fixes, shared hosting recommended release |
 | v2 - Infrastructure | ✅ Shipped | Async queue (Valkey), background workers, analytics caching, cache invalidation |
-| v2.1 - Optimization | ✅ Shipped | Schema cleanup, unified timezone, reduced DB round-trips, deduped auth helpers, faster bot filter |
+| v2.1 - Optimization | ✅ Stable (current) | Schema cleanup, unified timezone, reduced DB round-trips, deduped auth helpers, faster bot filter |
 | v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 
 ---

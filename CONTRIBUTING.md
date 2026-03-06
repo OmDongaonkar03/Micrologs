@@ -57,6 +57,8 @@ mysql -u your_user -p micrologs < schema.sql
 
 v1 is intentionally scoped to shared hosting - no Redis, no background workers, no daemons. If your contribution requires infrastructure beyond PHP + MySQL, it belongs in v2 or v3. Check the [ROADMAP.md](ROADMAP.md) before starting work to see where things are headed.
 
+> Note: v1.0.0 through v1.3.0 were pre-release builds. **v1.3.1 is the first stable v1 release** and the recommended shared hosting version.
+
 ---
 
 ## What we won't merge

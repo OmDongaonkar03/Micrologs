@@ -2,6 +2,9 @@
 
 All notable changes to Micrologs will be documented here.
 
+> **Stability note:** v1.0.0-alpha through v1.3.0-rc.1 were pre-release builds with known bugs and inconsistencies.
+> v1.3.1 is the first stable release (shared hosting). v2.1.0 is the current stable release (VPS).
+
 ---
 
 ## [2.1.0] - 2026-03-06

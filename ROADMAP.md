@@ -6,7 +6,7 @@ This is the honest, living roadmap for Micrologs. Items move when they're ready,
 
 ## Shipped
 
-### v1.0.0
+### v1.0.0 *(pre-release)*
 Full tracking pipeline and REST API on shared hosting.
 - Pageview, session, visitor tracking
 - JS error monitoring - auto-caught + manual
@@ -17,7 +17,7 @@ Full tracking pipeline and REST API on shared hosting.
 - Bot filtering, domain locking, public + secret key auth
 - Multi-project support
 
-### v1.1.0
+### v1.1.0 *(pre-release)*
 Security hardening and performance pass.
 - Fixed IP spoofing via X-Forwarded-For
 - Hard 64KB payload cap on all endpoints
@@ -27,13 +27,13 @@ Security hardening and performance pass.
 - Log rotation with 5-file history
 - Request ID in every log line
 
-### v1.2.0
+### v1.2.0 *(pre-release)*
 Analytics depth - no schema changes, no new tracking.
 - `sessions.php` - avg session duration, avg pages per session
 - `visitors-returning.php` - new vs returning visitors
 - `errors-trend.php` - daily error occurrences, top groups, single-group filter
 
-### v1.3.0
+### v1.3.0 *(pre-release)*
 Complete API coverage - full project management and error workflows.
 - `projects/list.php` - list all projects with summary stats
 - `projects/toggle.php` - enable/disable a project
@@ -43,6 +43,13 @@ Complete API coverage - full project management and error workflows.
 - `links/edit.php` - edit link destination, label, or active state
 - `track/errors-update-status.php` - update error group status individually or in bulk
 - `error_groups.status` ENUM expanded - added `investigating` between `open` and `resolved`
+
+### v1.3.1 *(first stable — shared hosting)*
+First fully stable release. Recommended for shared hosting installs.
+- `setup.php` browser wizard — tests DB, imports schema, creates first project, outputs snippet
+- Fixed `status=investigating` filter silently dropped in errors endpoint
+- Fixed missing `investigating` count in errors summary response
+- Simplified Composer setup — runs from project root
 
 ### v2.0.0
 Infrastructure release — async writes, cached reads. Requires Valkey + Supervisor on a VPS.
@@ -73,7 +80,7 @@ Official Laravel SDK - service provider, facade, auto-discovery, TrackErrors mid
 - `composer require micrologs/laravel`
 - [packagist.org/packages/micrologs/laravel](https://packagist.org/packages/micrologs/laravel)
 
-### v2.1.0
+### v2.1.0 *(current stable — VPS)*
 Schema and code optimization pass. No new endpoints, no breaking changes.
 - Unified `APP_TIMEZONE` constant — single source of truth for both PHP and MySQL timezone, removing silent divergence risk
 - Redundant duplicate indexes dropped from `projects`, `sessions`, `tracked_links`, `pageviews`, `error_events`, and `audit_logs` — a `UNIQUE KEY` already creates a B-tree index, maintaining a second identical one is pure write overhead
