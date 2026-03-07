@@ -50,9 +50,9 @@ if (!$project) {
 }
 
 sendResponse(true, "Key verified", [
-    "valid" => true,
-    "key_type" => $project["key_type"],
-    "project_name" => $project["name"],
-    "allowed_domains" => $project["allowed_domains"],
+    "valid"           => true,
+    "key_type"        => $project["key_type"],
+    "project_name"    => $project["name"],
+    "allowed_domains" => array_filter(explode(",", $project["allowed_domains"])),
 ]);
 ?>

@@ -1,0 +1,94 @@
+services:
+
+  # ── PHP-FPM ───────────────────────────────────────────────────
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: micrologs-php
+    volumes:
+      - .:/var/www/micrologs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      - ML_ENV=testing
+    networks:
+      - micrologs
+
+  # ── Apache ────────────────────────────────────────────────────
+  apache:
+    image: httpd:2.4
+    container_name: micrologs-apache
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/micrologs
+      - ./docker/apache/micrologs.conf:/usr/local/apache2/conf/extra/micrologs.conf
+      - ./docker/apache/httpd.conf:/usr/local/apache2/conf/httpd.conf
+    depends_on:
+      - php
+    networks:
+      - micrologs
+
+  # ── MySQL ─────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: micrologs-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: micrologs
+      MYSQL_USER: micrologs
+      MYSQL_PASSWORD: micrologs
+    ports:
+      - "3307:3306"   # 3307 on host so it doesn't clash with local MySQL
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micrologs
+
+  # ── Valkey ────────────────────────────────────────────────────
+  valkey:
+    image: valkey/valkey:7
+    container_name: micrologs-valkey
+    ports:
+      - "6380:6379"   # 6380 on host so it doesn't clash with local Valkey
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - micrologs
+
+  # ── Supervisor (workers) ──────────────────────────────────────
+  supervisor:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: micrologs-supervisor
+    command: supervisord -c /etc/supervisor/conf.d/micrologs-workers.conf
+    volumes:
+      - .:/var/www/micrologs
+      - ./supervisor/micrologs-workers.conf:/etc/supervisor/conf.d/micrologs-workers.conf
+    depends_on:
+      mysql:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - micrologs
+
+volumes:
+  mysql_data:
+
+networks:
+  micrologs:
+    driver: bridge

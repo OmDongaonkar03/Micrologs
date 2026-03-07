@@ -28,13 +28,13 @@
     </coverage>
 
     <php>
-        <env name="ML_TEST_DB_HOST" value="127.0.0.1"/>
-        <env name="ML_TEST_DB_USER" value="root"/>
-        <env name="ML_TEST_DB_PASS" value=""/>
-        <env name="ML_TEST_URL" value="http://localhost/micrologs"/>
+        <env name="ML_TEST_DB_HOST" value="your_db_host_here"/>
+        <env name="ML_TEST_DB_USER" value="your_db_user_here"/>
+        <env name="ML_TEST_DB_PASS" value="your_db_pass_here"/>
+        <env name="ML_TEST_URL" value="your_test_url_here"/>
         <env name="ML_TEST_ADMIN_KEY" value="your_admin_key_here"/>
-        <env name="ML_TEST_VALKEY_HOST" value="127.0.0.1"/>
-        <env name="ML_TEST_VALKEY_PORT" value="6379"/>
+        <env name="ML_TEST_VALKEY_HOST" value="your_valkey_host_here"/>
+        <env name="ML_TEST_VALKEY_PORT" value="your_valkey_port_here"/>
         <env name="ML_TEST_MODE" value="true"/>
     </php>
 </phpunit>

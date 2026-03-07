@@ -80,7 +80,14 @@ Official Laravel SDK - service provider, facade, auto-discovery, TrackErrors mid
 - `composer require micrologs/laravel`
 - [packagist.org/packages/micrologs/laravel](https://packagist.org/packages/micrologs/laravel)
 
-### v2.1.0 *(current stable — VPS)*
+### v2.2.0 *(current stable — VPS)*
+Performance improvement and Docker dev environment.
+- `api/track/pageview.php` — `geolocate()` and `parseUserAgent()` moved out of the HTTP request cycle into the background worker. Endpoint now does zero I/O beyond auth, hashing, and queue push. ~10x throughput improvement under concurrent load.
+- `workers/pageview-worker.php` — enrichment (GeoIP, UA parsing) now runs inside `processPageview()` before DB writes. No change to stored data.
+- Full Docker dev/test environment added (`docker/`): Apache + PHP-FPM 8.2 + MySQL 8.0 + Valkey 7 + Supervisor. Eliminates XAMPP/Windows limitations for stress testing.
+- Stress test results (100 VUs, 60s): ~16,000 req/min, p95 ~400ms, 0% application errors.
+
+### v2.1.0 *(VPS)*
 Schema and code optimization pass. No new endpoints, no breaking changes.
 - Unified `APP_TIMEZONE` constant — single source of truth for both PHP and MySQL timezone, removing silent divergence risk
 - Redundant duplicate indexes dropped from `projects`, `sessions`, `tracked_links`, `pageviews`, `error_events`, and `audit_logs` — a `UNIQUE KEY` already creates a B-tree index, maintaining a second identical one is pure write overhead
@@ -98,7 +105,6 @@ Schema and code optimization pass. No new endpoints, no breaking changes.
 
 Patch releases and minor improvements on the v2 foundation.
 
-- [ ] APCu rate limiter - drop-in replacement for the file-based rate limiter on hosts that support APCu. Atomic, zero filesystem I/O, no race condition.
 - [ ] `verifyPublicKey` Valkey cache - cache the key→project lookup with 60s TTL, eliminating one DB query on every single tracking request.
 - [ ] Health endpoint extended with queue depth and worker status.
 
@@ -135,7 +141,6 @@ These are not committed - they need more thought or depend on community demand.
 These are explicitly out of scope for the core engine.
 
 - **A bundled dashboard UI** - Micrologs is headless by design. The API is the product. Build your own dashboard, pipe data into Grafana, query it from your admin panel - whatever fits your stack.
-- **Docker image** - contradicts the shared hosting first principle of v1. May reconsider for v2 as an optional deployment method.
 - **Cloud-specific integrations** - no AWS/GCP/Azure specific features in the core engine.
 
 ---

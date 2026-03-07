@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 2.1.x | ✅ Active (current stable) |
+| 2.2.x | ✅ Active (current stable) |
+| 2.1.x | Security fixes only |
 | 2.0.x | Security fixes only |
 | 1.3.1 | Security fixes only |
 | 1.3.0 and below | No longer supported |

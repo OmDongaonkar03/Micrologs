@@ -22,20 +22,8 @@ $projectId = (int) $project["id"];
 $range = parseDateRange();
 $limit = min(100, max(1, (int) ($_GET["limit"] ?? 50)));
 
-// ── Cache lookup ─────────────────────────────────────────────────
-// Key includes all active filters so different filter combinations
-// get their own independent cache entries.
-$status = trim($_GET["status"] ?? "");
-$severity = trim($_GET["severity"] ?? "");
-$environment = trim($_GET["environment"] ?? "");
-$cacheKey = "analytics:errors:{$projectId}:{$range["from"]}:{$range["to"]}:{$status}:{$severity}:{$environment}";
-$cached = cacheGet($cacheKey);
-if ($cached !== null) {
-    sendResponse(true, "Errors fetched successfully", $cached);
-}
-
-// Cache miss — validate filters and run queries
-// Optional filters
+// Validate filters first, then build cache key from validated values
+// so invalid inputs (e.g. status=garbage) don't pollute the cache.
 $status = in_array($_GET["status"] ?? "", [
     "open",
     "investigating",
@@ -59,6 +47,17 @@ $environment = in_array($_GET["environment"] ?? "", [
 ])
     ? $_GET["environment"]
     : null;
+
+// ── Cache lookup ─────────────────────────────────────────────────
+// Key includes all active filters so different filter combinations
+// get their own independent cache entries.
+$cacheKey = "analytics:errors:{$projectId}:{$range["from"]}:{$range["to"]}:" . ($status ?? "") . ":" . ($severity ?? "") . ":" . ($environment ?? "");
+$cached = cacheGet($cacheKey);
+if ($cached !== null) {
+    sendResponse(true, "Errors fetched successfully", $cached);
+}
+
+// Cache miss — run queries
 
 // Build query dynamically
 $where = "project_id = ? AND last_seen BETWEEN ? AND ?";

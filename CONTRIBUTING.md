@@ -30,7 +30,9 @@ Keep PRs focused - one fix or feature per PR makes review faster.
 
 ## Local setup
 
-Requirements: PHP 8.1+, MySQL 8.0+ or MariaDB 10.4+, Composer
+**Option A — Docker (recommended):** See `docker/README.md` for a full production-like environment with Apache, PHP-FPM, MySQL, Valkey, and Supervisor.
+
+**Option B — Manual:** Requirements: PHP 8.1+, MySQL 8.0+ or MariaDB 10.4+, Composer
 
 ```bash
 git clone https://github.com/OmDongaonkar03/Micrologs.git

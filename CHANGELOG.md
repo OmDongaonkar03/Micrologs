@@ -3,7 +3,84 @@
 All notable changes to Micrologs will be documented here.
 
 > **Stability note:** v1.0.0-alpha through v1.3.0-rc.1 were pre-release builds with known bugs and inconsistencies.
-> v1.3.1 is the first stable release (shared hosting). v2.1.0 is the current stable release (VPS).
+> v1.3.1 is the first stable release (shared hosting). v2.2.0 is the current stable release (VPS).
+
+---
+
+## [2.2.0] - 2026-03-07
+
+Performance improvement, Docker-based dev/test environment, and bug fixes. No breaking changes — drop-in replacement for v2.1.0.
+
+### Fixed
+
+**`schema.sql`**
+- `error_groups.status` ENUM was missing `'investigating'` — introduced in v1.3.0, it was present in the code (`errors-update-status.php`, `errors.php`) but absent from the schema definition. Any attempt to set a group to `investigating` would silently store an empty string. Schema now matches the code: `enum('open','investigating','resolved','ignored')`.
+- `link_clicks` was missing foreign key constraints. Added `fk_lc_link` (`link_id → tracked_links.id ON DELETE CASCADE`) and `fk_lc_project` (`project_id → projects.id ON DELETE CASCADE`). Previously, deleting a tracked link via `links/delete.php` left its click rows orphaned.
+
+**`supervisor/micrologs-workers.conf`**
+- Added `pidfile=` directive to all three worker programs. Without it, Supervisor never wrote PID files and `api/health.php` always reported all workers as down in production (even when they were running).
+
+**`api/health.php`**
+- Rewrote worker health check to match the actual PID file naming Supervisor uses for multi-process programs: `micrologs-pageview_00.pid`, `micrologs-pageview_01.pid`, etc. Previously checked for `pageview-worker.pid` (a file that never existed). Now globs per-program, checks each process individually, and reports `ok (3/3)` or `degraded (2/3 running)`.
+
+**`api/projects/verify.php`**
+- `allowed_domains` was returned as a raw comma-separated string. Now returns an array via `explode()`, consistent with every other endpoint that returns domain data (`list.php`, `edit.php`).
+
+**`api/analytics/errors.php`**
+- Cache key was built from raw unvalidated filter values before the whitelist check. An invalid filter (e.g. `status=garbage`) would create a junk cache entry keyed on the garbage value, then cache and return an unfiltered result under that key. Validation now runs before the cache key is constructed.
+
+### Changed
+
+**`api/track/pageview.php`**
+- Removed synchronous `geolocate()` and `parseUserAgent()` calls from the HTTP request cycle. These were blocking PHP-FPM workers under load — every request was doing a GeoIP `.mmdb` file read before returning.
+- Payload now passes `ip_raw` and `user_agent` strings to the queue instead of pre-resolved geo and device objects.
+- Result: **~10x throughput improvement** under concurrent load. Tracking endpoint now does zero I/O beyond auth, hashing, and queue push.
+
+**`workers/pageview-worker.php`**
+- `geolocate()` and `parseUserAgent()` moved here — called inside `processPageview()` before DB writes.
+- No change to what gets stored. All enrichment still happens, just off the HTTP request cycle.
+
+**`.gitignore`**
+- Added `supervisord.pid` and `supervisor/pids/` — Supervisor-generated PID files were not previously excluded and could have been committed accidentally.
+
+### Added
+
+**Docker dev/test environment** (`docker/`)
+- `docker-compose.yml` — full production-like stack: Apache, PHP-FPM 8.2, MySQL 8.0, Valkey 7, Supervisor
+- `docker/php/Dockerfile` — PHP-FPM with mysqli, Composer, 50 FPM worker processes
+- `docker/apache/httpd.conf` — Apache config with MPM event tuning for high concurrency
+- `docker/apache/micrologs.conf` — VHost proxying to PHP-FPM container
+- `docker/env.docker.php` — env template pre-wired to Docker service names (`mysql`, `valkey`)
+- `docker/README.md` — full setup, test, and useful commands reference
+- Eliminates XAMPP/Windows TCP port exhaustion under stress testing
+- MySQL on host port `3307`, Valkey on host port `6380` to avoid clashing with local installs
+
+### Performance (stress test, 100 VUs, 60s, Docker on WSL2)
+
+| Metric | v2.1.0 | v2.2.0 |
+|---|---|---|
+| Requests/min | ~1,300 | ~16,000 |
+| p95 latency | ~6,000ms | ~400ms |
+| Error rate | high | ~2% (WSL2 TCP, not application errors) |
+
+On a real Linux VPS, p99 < 10ms is expected.
+
+### Migration
+
+**Schema change required** — run the following against your `micrologs` database:
+
+```sql
+-- Fix missing 'investigating' status in error_groups
+ALTER TABLE `error_groups`
+  MODIFY `status` ENUM('open','investigating','resolved','ignored') NOT NULL DEFAULT 'open';
+
+-- Add missing FK constraints on link_clicks
+ALTER TABLE `link_clicks`
+  ADD CONSTRAINT `fk_lc_link` FOREIGN KEY (`link_id`) REFERENCES `tracked_links` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_lc_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE;
+```
+
+Deploy updated files: `api/track/pageview.php`, `workers/pageview-worker.php`, `api/health.php`, `api/projects/verify.php`, `api/analytics/errors.php`, `supervisor/micrologs-workers.conf`. Restart workers and Supervisor after deploy.
 
 ---
 

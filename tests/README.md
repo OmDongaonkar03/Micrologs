@@ -80,19 +80,19 @@ export ML_TEST_ADMIN_KEY=your_admin_key
 
 ```bash
 # All tests
-vendor/bin/phpunit --configuration tests/phpunit.xml
+utils/vendor/bin/phpunit --configuration tests/phpunit.xml
 
 # Just API tests
-vendor/bin/phpunit --configuration tests/phpunit.xml --testsuite api
+utils/vendor/bin/phpunit --configuration tests/phpunit.xml --testsuite api
 
 # Just worker tests
-vendor/bin/phpunit --configuration tests/phpunit.xml --testsuite workers
+utils/vendor/bin/phpunit --configuration tests/phpunit.xml --testsuite workers
 
 # Single test class
-vendor/bin/phpunit tests/api/ProjectTest.php
+utils/vendor/bin/phpunit tests/api/ProjectTest.php
 
 # Single test method
-vendor/bin/phpunit --filter test_create_project_succeeds tests/api/ProjectTest.php
+utils/vendor/bin/phpunit --filter test_create_project_succeeds tests/api/ProjectTest.php
 ```
 
 ### How it works
@@ -191,7 +191,7 @@ jobs:
       - run: |
           php -S localhost:8080 -t . &
           sleep 2
-          vendor/bin/phpunit --configuration tests/phpunit.xml
+          utils/vendor/bin/phpunit --configuration tests/phpunit.xml
         env:
           ML_TEST_DB_PASS: root
           ML_TEST_ADMIN_KEY: ${{ secrets.TEST_ADMIN_KEY }}

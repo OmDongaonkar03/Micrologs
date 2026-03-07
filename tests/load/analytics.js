@@ -77,6 +77,11 @@ export default function () {
   const res = http.get(`${BASE_URL}${endpoint}?range=${range}`, {
     headers: {
       "X-API-Key": SECRET_KEY,
+      Accept: "application/json",
+      "Accept-Language": "en-US,en;q=0.9",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "X-Test-Mode": "phpunit",
     },
     tags: { name: tag },
   });

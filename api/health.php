@@ -64,29 +64,46 @@ try {
 
 // Workers — only checked in production (Supervisor not used locally)
 if (defined("IS_PRODUCTION") && IS_PRODUCTION) {
+    // Each worker program runs multiple processes (numprocs).
+    // Supervisor names PID files as {program_name}_{NN}.pid — e.g.
+    // micrologs-pageview_00.pid, micrologs-pageview_01.pid, etc.
+    // We glob for all PIDs belonging to each program and require every
+    // process to be alive before reporting that worker as "ok".
     $workers = [
-        "pageview-worker" => __DIR__ . "/../supervisor/pids/pageview-worker.pid",
-        "error-worker"    => __DIR__ . "/../supervisor/pids/error-worker.pid",
-        "audit-worker"    => __DIR__ . "/../supervisor/pids/audit-worker.pid",
+        "pageview-worker" => [
+            "pattern"  => __DIR__ . "/../supervisor/pids/micrologs-pageview_*.pid",
+            "numprocs" => 3,
+        ],
+        "error-worker" => [
+            "pattern"  => __DIR__ . "/../supervisor/pids/micrologs-error_*.pid",
+            "numprocs" => 2,
+        ],
+        "audit-worker" => [
+            "pattern"  => __DIR__ . "/../supervisor/pids/micrologs-audit_*.pid",
+            "numprocs" => 2,
+        ],
     ];
 
     $allWorkersOk = true;
     $workerStatuses = [];
 
-    foreach ($workers as $name => $pidFile) {
-        if (!file_exists($pidFile)) {
-            $workerStatuses[$name] = "not running";
-            $allWorkersOk = false;
-            continue;
+    foreach ($workers as $name => $config) {
+        $pidFiles = glob($config["pattern"]) ?: [];
+        $running  = 0;
+
+        foreach ($pidFiles as $pidFile) {
+            $pid = (int) trim(file_get_contents($pidFile));
+            // posix_kill signal 0 checks process existence without killing it
+            if ($pid > 0 && posix_kill($pid, 0)) {
+                $running++;
+            }
         }
 
-        $pid = (int) trim(file_get_contents($pidFile));
-
-        // posix_kill with signal 0 checks if the process exists without killing it
-        if ($pid > 0 && posix_kill($pid, 0)) {
-            $workerStatuses[$name] = "ok";
+        $expected = $config["numprocs"];
+        if ($running === $expected) {
+            $workerStatuses[$name] = "ok ({$running}/{$expected})";
         } else {
-            $workerStatuses[$name] = "not running";
+            $workerStatuses[$name] = "degraded ({$running}/{$expected} running)";
             $allWorkersOk = false;
         }
     }

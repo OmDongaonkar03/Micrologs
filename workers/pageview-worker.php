@@ -189,8 +189,12 @@ function processPageview(\mysqli $conn, array $p): void
     }
 
     // === LOCATION + DEVICE =======================================
-    $locationId = resolveLocation($conn, $projectId, $p["geo"]);
-    $deviceId = resolveDevice($conn, $projectId, $p["device"]);
+    // Enrichment moved here from the endpoint so the HTTP request
+    // returns immediately without blocking on GeoIP / UA parsing.
+    $geo = geolocate($p["ip_raw"] ?? "");
+    $device = parseUserAgent($p["user_agent"] ?? "");
+    $locationId = resolveLocation($conn, $projectId, $geo);
+    $deviceId = resolveDevice($conn, $projectId, $device);
 
     // === INSERT PAGEVIEW =========================================
     // Use received_at from the payload — the timestamp was captured

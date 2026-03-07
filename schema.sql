@@ -89,7 +89,7 @@ CREATE TABLE `error_groups` (
   `line` int(10) UNSIGNED DEFAULT NULL,
   `severity` enum('info','warning','error','critical') NOT NULL DEFAULT 'error',
   `environment` enum('production','staging','development','unknown') NOT NULL DEFAULT 'production',
-  `status` enum('open','resolved','ignored') NOT NULL DEFAULT 'open',
+  `status` enum('open','investigating','resolved','ignored') NOT NULL DEFAULT 'open',
   `occurrence_count` int(10) UNSIGNED NOT NULL DEFAULT 1,
   `first_seen` datetime NOT NULL DEFAULT current_timestamp(),
   `last_seen` datetime NOT NULL DEFAULT current_timestamp()
@@ -424,7 +424,12 @@ ALTER TABLE `error_groups`
   ADD CONSTRAINT `fk_eg_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE;
 
 --
--- Constraints for table `locations`
+-- Constraints for table `link_clicks`
+--
+ALTER TABLE `link_clicks`
+  ADD CONSTRAINT `fk_lc_link` FOREIGN KEY (`link_id`) REFERENCES `tracked_links` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_lc_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE;
+
 --
 ALTER TABLE `locations`
   ADD CONSTRAINT `fk_locations_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE;

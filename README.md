@@ -110,7 +110,7 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 
 | Engine | Node SDK | Python SDK | Laravel SDK |
 |---|---|---|---|
-| v2.1.0 *(current)* | v1.1.0 | v1.0.0 | v1.0.0 |
+| v2.2.0 *(current)* | v1.1.0 | v1.0.0 | v1.0.0 |
 | v1.3.1 *(shared hosting stable)* | v1.0.0 | v1.0.0 | v1.0.0 |
 
 ---
@@ -125,7 +125,8 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 | v1.3 - Complete API | ✅ Shipped (pre-release) | Project management (list, toggle, delete, rotate keys), link edit/detail, error status updates |
 | v1.3.1 - First stable | ✅ Stable | Setup wizard, bug fixes, shared hosting recommended release |
 | v2 - Infrastructure | ✅ Shipped | Async queue (Valkey), background workers, analytics caching, cache invalidation |
-| v2.1 - Optimization | ✅ Stable (current) | Schema cleanup, unified timezone, reduced DB round-trips, deduped auth helpers, faster bot filter |
+| v2.1 - Optimization | ✅ Stable | Schema cleanup, unified timezone, reduced DB round-trips, deduped auth helpers, faster bot filter |
+| v2.2 - Performance | ✅ Stable (current) | Async GeoIP/UA enrichment, 10x tracking throughput, Docker dev environment |
 | v3 - Realtime | Planned | WebSockets, live visitor count, live error feed |
 
 ---
@@ -133,9 +134,6 @@ Official SDKs for backend error tracking and audit logging. The JS snippet handl
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) - issues and PRs are welcome.
-
-Looking for contributors especially for:
-- APCu rate limiter for hosts that support it
 
 ---
 
