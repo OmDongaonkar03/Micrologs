@@ -2,7 +2,7 @@
 
 A self-hostable analytics + error tracking engine. Drop one script tag, data hits your own database. No SaaS bill, no third-party dashboard, no black box.
 
-Works on the cheapest shared hosting you can find - handles up to **~10,000 pageviews/day** on a standard shared host with no Redis, no queue, and no VPS required. On a VPS with v2, the ceiling jumps to **~500,000 pageviews/day** with async queuing and Valkey caching. Each stage is opt-in — shared hosting users are never broken by what VPS users unlock.
+Works on the cheapest shared hosting you can find - handles up to **~10,000 pageviews/day** on a standard shared host with no Redis, no queue, and no VPS required. On a VPS with v2, the ceiling jumps to **~2.5M pageviews/day** with async queuing and Valkey caching on a single node. Each stage is opt-in — shared hosting users are never broken by what VPS users unlock.
 
 **[→ Full setup guide](IMPLEMENTATION.md)**
 
